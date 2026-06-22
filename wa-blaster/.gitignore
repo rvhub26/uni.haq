@@ -1,0 +1,4 @@
+node_modules/
+backend/auth/
+backend/uploads/
+backend/data/*.json

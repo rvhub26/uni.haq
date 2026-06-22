@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>uni.haq — Broadcast Platform</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg class="brand-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#22c55e"/>
+          <stop offset="100%" stop-color="#075E54"/>
+        </linearGradient>
+      </defs>
+      <rect width="40" height="40" rx="11" fill="url(#logoGrad)"/>
+      <path d="M8 20L32 9L25 31L19 23L8 20Z" fill="white"/>
+      <path d="M19 23L25 31L28 17" stroke="#075E54" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+      <circle cx="19" cy="23" r="1.8" fill="#c8ffd4"/>
+    </svg>
+    <div class="brand-text">
+      <div class="brand-name-row">
+        <span class="brand-uni">uni</span><span class="brand-dot">.</span><span class="brand-haq">haq</span>
+      </div>
+      <div class="brand-tagline">Broadcast Platform</div>
+    </div>
+  </div>
+
+  <nav class="nav-section">
+    <div class="nav-section-label">Menu</div>
+    <a class="nav-item active" data-tab="dashboard">
+      <span class="nav-icon">🏠</span>
+      <span>Dashboard</span>
+    </a>
+    <a class="nav-item" data-tab="contacts">
+      <span class="nav-icon">👥</span>
+      <span>Contacts</span>
+    </a>
+    <a class="nav-item" data-tab="templates">
+      <span class="nav-icon">📝</span>
+      <span>Templates</span>
+    </a>
+    <a class="nav-item" data-tab="jadual">
+      <span class="nav-icon">📅</span>
+      <span>Jadual Blast</span>
+    </a>
+    <a class="nav-item" data-tab="queue">
+      <span class="nav-icon">⏳</span>
+      <span>Queue &amp; Log</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="status-pill">
+      <span id="nav-status-dot" class="status-dot disconnected"></span>
+      <span id="nav-status-text">Tidak Bersambung</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- ══ DASHBOARD ══ -->
+  <div id="tab-dashboard" class="tab-panel active">
+    <div class="page-header">
+      <div>
+        <h1>🏠 Dashboard</h1>
+        <div class="page-header-sub">Ringkasan sistem uni.haq</div>
+      </div>
+    </div>
+    <div class="page-content">
+
+      <!-- WA Status -->
+      <div class="wa-status-card" id="wa-card">
+        <div class="wa-status-left">
+          <div class="wa-icon-wrap">💬</div>
+          <div>
+            <div class="wa-title">WhatsApp</div>
+            <div id="wa-status-label" class="wa-label">Menyemak status...</div>
+          </div>
+        </div>
+        <span id="status-badge" class="badge disconnected">Tidak Bersambung</span>
+      </div>
+
+      <!-- QR -->
+      <div id="qr-section" style="display:none;">
+        <p style="color:#64748b;font-size:0.88rem;">Scan QR ini dengan WhatsApp → Peranti Terpaut → Tambah Peranti</p>
+        <img id="qr-img" src="" alt="QR Code" />
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="stat-contacts">0</div>
+            <div class="stat-label">Contacts</div>
+          </div>
+          <div class="stat-icon blue">👥</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="stat-templates">0</div>
+            <div class="stat-label">Templates</div>
+          </div>
+          <div class="stat-icon purple">📝</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="stat-schedules">0</div>
+            <div class="stat-label">Jadual Aktif</div>
+          </div>
+          <div class="stat-icon orange">📅</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="stat-queue">0</div>
+            <div class="stat-label">Dalam Queue</div>
+          </div>
+          <div class="stat-icon green">⏳</div>
+        </div>
+      </div>
+
+      <!-- Recent logs -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Log Terkini</h2>
+          <a class="btn-icon" data-tab="queue" style="cursor:pointer;">Lihat Semua →</a>
+        </div>
+        <div id="dash-logs"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ CONTACTS ══ -->
+  <div id="tab-contacts" class="tab-panel">
+    <div class="page-header">
+      <div>
+        <h1>👥 Contacts <span class="count-badge" id="contact-count">0</span></h1>
+        <div class="page-header-sub">Urus senarai penerima blast</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <label class="btn-primary" style="cursor:pointer;">
+          📂 Upload Excel
+          <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" />
+        </label>
+        <button class="btn-danger" id="btn-clear-all">🗑 Kosongkan</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="card">
+        <div class="info-box">
+          💡 Format Excel: header kolum mesti <strong>nama</strong> dan <strong>telefon</strong>
+        </div>
+        <div id="upload-status" style="margin-bottom:10px;font-size:0.88rem;font-weight:500;"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Nama</th><th>Telefon</th><th></th></tr></thead>
+            <tbody id="contacts-body">
+              <tr><td colspan="4" class="empty-row">Tiada contacts lagi. Upload Excel untuk mula.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TEMPLATES ══ -->
+  <div id="tab-templates" class="tab-panel">
+    <div class="page-header">
+      <div>
+        <h1>📝 Template Library <span class="count-badge" id="tmpl-count">0</span></h1>
+        <div class="page-header-sub">Simpan dan urus template mesej</div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="two-col">
+
+        <!-- Form -->
+        <div class="card">
+          <div class="card-header" style="margin-bottom:16px;">
+            <h2 id="tmpl-form-title">Tambah Template Baru</h2>
+          </div>
+          <div class="form-stack">
+            <div class="field-group">
+              <label class="field-label">Nama Template</label>
+              <input type="text" id="tmpl-name" class="input-field" placeholder="Cth: Hari 1 — Follow Up" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Teks Mesej</label>
+              <div class="field-hint" style="margin-bottom:6px;">Guna <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:0.82rem;">{nama}</code> untuk nama customer</div>
+              <textarea id="tmpl-text" rows="5" placeholder="Hai {nama}, ada tawaran istimewa untuk anda hari ini!"></textarea>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Gambar / Video <span style="font-weight:400;color:#94a3b8;">(Pilihan)</span></label>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <label class="btn-secondary" style="cursor:pointer;">
+                  🖼 Pilih Fail
+                  <input type="file" id="tmpl-media-input" accept="image/*,video/mp4,video/quicktime" style="display:none" />
+                </label>
+                <span id="tmpl-media-name" style="font-size:0.83rem;color:#64748b;"></span>
+                <button class="btn-link-danger" id="tmpl-media-remove" style="display:none;">✕ Buang</button>
+              </div>
+              <input type="hidden" id="tmpl-media-file" value="" />
+              <input type="hidden" id="tmpl-edit-id" value="" />
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button class="btn-primary" id="btn-save-tmpl">➕ Simpan Template</button>
+              <button class="btn-secondary" id="btn-cancel-tmpl-edit" style="display:none;">Batal</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- List -->
+        <div class="card" style="min-height:200px;">
+          <div class="card-header" style="margin-bottom:12px;">
+            <h2>Templates Tersimpan</h2>
+          </div>
+          <div id="tmpl-list"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ JADUAL ══ -->
+  <div id="tab-jadual" class="tab-panel">
+    <div class="page-header">
+      <div>
+        <h1>📅 Jadual Blast</h1>
+        <div class="page-header-sub">Tetapkan masa dan template untuk blast automatik</div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="two-col">
+
+        <!-- Form -->
+        <div class="card">
+          <div class="card-header" style="margin-bottom:16px;">
+            <h2>Buat Jadual Baru</h2>
+          </div>
+          <div class="schedule-form">
+
+            <!-- Step 1: Template -->
+            <div class="field-group">
+              <label class="step-label"><span class="step-num">1</span> Pilih Template</label>
+              <div class="radio-group" style="margin-top:8px;">
+                <label><input type="radio" name="sched-mode" value="single" checked /> Satu Template</label>
+                <label><input type="radio" name="sched-mode" value="rotation" /> Rotation (gilir-gilir)</label>
+              </div>
+              <div id="single-tmpl-pick" style="margin-top:10px;">
+                <div id="single-tmpl-list" class="pick-list">
+                  <p class="empty-pick">Tiada template. Tambah dalam tab Templates dahulu.</p>
+                </div>
+              </div>
+              <div id="rotation-fields" style="display:none;margin-top:10px;">
+                <p class="field-hint" style="margin-bottom:8px;">Tick mengikut urutan hari. Selepas habis, ulang dari mula.</p>
+                <div id="rotation-tmpl-list" class="pick-list"></div>
+                <div id="rotation-order-preview" style="margin-top:10px;"></div>
+
+                <div style="margin-top:16px;">
+                  <label class="field-label" style="margin-bottom:6px;">Gap Antara Template (nombor yang sama)</label>
+                  <p class="field-hint" style="margin-bottom:10px;">Nombor dapat Template 1 sekarang, Template 2 selepas gap ini.</p>
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <input type="number" id="tmpl-gap-value" class="input-field" value="24" min="1" style="width:90px;" />
+                    <select id="tmpl-gap-unit" class="input-field" style="width:120px;">
+                      <option value="1000">Saat</option>
+                      <option value="60000">Minit</option>
+                      <option value="3600000">Jam</option>
+                      <option value="86400000" selected>Hari</option>
+                    </select>
+                    <span id="tmpl-gap-preview" class="gap-preview"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 2: Timing -->
+            <div class="field-group">
+              <label class="step-label"><span class="step-num">2</span> Bila Nak Blast?</label>
+              <div class="radio-group" style="margin-top:8px;">
+                <label><input type="radio" name="sched-type" value="one-time" checked /> Sekali Sahaja</label>
+                <label><input type="radio" name="sched-type" value="recurring" /> Berulang</label>
+              </div>
+              <div id="one-time-fields" style="margin-top:10px;">
+                <input type="datetime-local" id="sched-datetime" class="input-field" />
+              </div>
+              <div id="recurring-fields" style="display:none;margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+                <select id="sched-frequency" class="input-field">
+                  <option value="daily">Setiap Hari</option>
+                  <option value="weekly">Setiap Minggu</option>
+                  <option value="monthly">Setiap Bulan</option>
+                </select>
+                <div id="weekly-days" style="display:none;">
+                  <div class="days-row">
+                    <label><input type="checkbox" name="sched-day" value="0" /> Ahad</label>
+                    <label><input type="checkbox" name="sched-day" value="1" /> Isnin</label>
+                    <label><input type="checkbox" name="sched-day" value="2" /> Selasa</label>
+                    <label><input type="checkbox" name="sched-day" value="3" /> Rabu</label>
+                    <label><input type="checkbox" name="sched-day" value="4" /> Khamis</label>
+                    <label><input type="checkbox" name="sched-day" value="5" /> Jumaat</label>
+                    <label><input type="checkbox" name="sched-day" value="6" /> Sabtu</label>
+                  </div>
+                </div>
+                <div id="monthly-day" style="display:none;">
+                  <input type="number" id="sched-day-of-month" class="input-field" min="1" max="28" placeholder="Tarikh (1-28)" style="width:160px;" />
+                </div>
+                <input type="time" id="sched-time" class="input-field" style="width:140px;" />
+              </div>
+            </div>
+
+            <!-- Step 3: Contacts -->
+            <div class="field-group">
+              <label class="step-label"><span class="step-num">3</span> Hantar Kepada</label>
+              <div class="radio-group" style="margin-top:8px;">
+                <label><input type="radio" name="sched-contacts" value="all" checked /> Semua Contacts</label>
+                <label><input type="radio" name="sched-contacts" value="select" /> Pilih Tertentu</label>
+              </div>
+              <div id="contact-select-list" style="display:none;margin-top:10px;" class="pick-list"></div>
+            </div>
+
+            <!-- Step 4: Gap -->
+            <div class="field-group">
+              <label class="step-label"><span class="step-num">4</span> Gap Antara Setiap Nombor</label>
+              <p class="field-hint" style="margin-bottom:8px;">Contact 1 sekarang, Contact 2 selepas gap ini (elak ban).</p>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <input type="number" id="gap-value" class="input-field" value="4" min="1" style="width:90px;" />
+                <select id="gap-unit" class="input-field" style="width:120px;">
+                  <option value="1000">Saat</option>
+                  <option value="60000">Minit</option>
+                  <option value="3600000">Jam</option>
+                  <option value="86400000">Hari</option>
+                </select>
+                <span id="gap-preview" class="gap-preview"></span>
+              </div>
+            </div>
+
+            <button class="btn-primary" id="btn-save-schedule" style="width:100%;justify-content:center;padding:11px;">
+              💾 Simpan Jadual
+            </button>
+          </div>
+        </div>
+
+        <!-- Saved schedules -->
+        <div class="card">
+          <div class="card-header" style="margin-bottom:12px;">
+            <h2>Jadual Tersimpan</h2>
+          </div>
+          <div id="schedules-list"><p class="empty-pick">Tiada jadual lagi</p></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ QUEUE & LOG ══ -->
+  <div id="tab-queue" class="tab-panel">
+    <div class="page-header">
+      <div>
+        <h1>⏳ Queue &amp; Log</h1>
+        <div class="page-header-sub">Pantau mesej pending dan sejarah blast</div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="two-col">
+
+        <div class="card">
+          <div class="card-header" style="margin-bottom:12px;">
+            <h2>⏳ Menunggu Hantar</h2>
+          </div>
+          <div id="queue-list"><p class="empty-pick">Tiada mesej dalam queue</p></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header" style="margin-bottom:12px;">
+            <h2>📋 Log Blast</h2>
+            <button class="btn-danger" id="btn-clear-logs" style="font-size:0.78rem;padding:5px 12px;">🗑 Kosongkan</button>
+          </div>
+          <div id="logs-list"><p class="empty-pick">Tiada log lagi</p></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

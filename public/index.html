@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto Broadcast</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <h1>Auto Broadcast</h1>
+        <span id="statusBadge" class="badge">idle</span>
+      </header>
+
+      <main class="layout">
+        <section class="panel">
+          <h2>Connection</h2>
+          <p id="connectionMessage">Waiting for connection...</p>
+          <div id="qrContainer" class="qr-container hidden">
+            <img id="qrImage" alt="WhatsApp QR" />
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <h2>Add Contact</h2>
+          <form id="contactForm">
+            <input id="contactName" type="text" placeholder="Contact name" required />
+            <input id="contactJid" type="text" placeholder="6281234567890@s.whatsapp.net" required />
+            <button type="submit">Add contact</button>
+          </form>
+        </section>
+
+        <section class="panel panel-wide">
+          <h2>Broadcast Message</h2>
+          <form id="broadcastForm">
+            <textarea id="messageText" rows="5" placeholder="Type message to broadcast" required></textarea>
+            <button type="submit">Send Broadcast</button>
+          </form>
+        </section>
+
+        <section class="panel panel-wide">
+          <h2>Schedule Message</h2>
+          <form id="scheduleForm">
+            <textarea id="scheduleMessage" rows="4" placeholder="Message to send later" required></textarea>
+            <div class="schedule-controls">
+              <input id="scheduleTime" type="datetime-local" required />
+              <select id="scheduleFrequency">
+                <option value="once">Once</option>
+                <option value="daily">Daily</option>
+              </select>
+              <button type="submit">Schedule Post</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <h2>Contacts</h2>
+          <ul id="contactList" class="contact-list"></ul>
+        </section>
+
+        <section class="panel panel-wide">
+          <h2>Scheduled Posts</h2>
+          <ul id="scheduleList" class="schedule-list"></ul>
+        </section>
+
+        <section class="panel panel-wide">
+          <h2>Recent History</h2>
+          <ul id="historyList" class="history-list"></ul>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

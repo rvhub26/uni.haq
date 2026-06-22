@@ -1,0 +1,22 @@
+{
+  "name": "auto_broadcast",
+  "version": "1.0.0",
+  "description": "WhatsApp broadcast dashboard with Baileys",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "qrcode": "^1.5.4"
+  }
+}
