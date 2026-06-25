@@ -57,6 +57,10 @@
       <span class="nav-icon">📊</span>
       <span>Laporan</span>
     </a>
+    <a class="nav-item" data-tab="peranti">
+      <span class="nav-icon">📱</span>
+      <span>Peranti</span>
+    </a>
   </nav>
 
   <!-- Device Selector -->
@@ -705,6 +709,119 @@
       </div>
 
     </div>
+  </div>
+
+  <!-- ══ PERANTI ══ -->
+  <div id="tab-peranti" class="tab-panel">
+    <div class="page-header">
+      <div>
+        <h1>📱 Peranti WhatsApp</h1>
+        <div class="page-header-sub">Urus nombor WhatsApp untuk blast</div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="card" style="max-width:600px;">
+        <div class="card-header" style="margin-bottom:16px;">
+          <h2>Tambah Nombor Baru</h2>
+        </div>
+        <form id="add-device-form" onsubmit="_addDeviceSubmit(event); return false;" style="display:flex;gap:10px;margin-bottom:20px;">
+          <input type="text" id="new-device-name-inline" class="input-field" placeholder="Nama peranti cth: Nombor Utama, Nombor Sales..." style="flex:1;" />
+          <input type="submit" class="btn-primary" style="white-space:nowrap;border:none;cursor:pointer;" value="+ Tambah" />
+        </form>
+        <div id="peranti-list" style="display:flex;flex-direction:column;gap:12px;">
+          <p class="empty-pick">Tiada peranti. Tambah nombor untuk mula.</p>
+        </div>
+      </div>
+      <!-- QR Code panel -->
+      <div id="qr-panel" class="card" style="max-width:400px;display:none;">
+        <div class="card-header" style="margin-bottom:16px;">
+          <h2>Scan QR Code</h2>
+        </div>
+        <p style="font-size:0.85rem;color:#94a3b8;margin-bottom:16px;">Buka WhatsApp → Peranti Tertaut → Taut Peranti → Scan QR</p>
+        <div id="qr-container" style="background:#fff;padding:16px;border-radius:12px;display:flex;justify-content:center;align-items:center;min-height:260px;">
+          <p style="color:#64748b;text-align:center;">Tunggu QR code...</p>
+        </div>
+        <p id="qr-status-text" style="margin-top:12px;font-size:0.82rem;color:#64748b;text-align:center;"></p>
+      </div>
+    </div>
+    <script>
+    function _addDeviceSubmit(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      var name = document.getElementById('new-device-name-inline').value.trim();
+      if (!name) { alert('Masukkan nama peranti'); return false; }
+      fetch('/api/devices', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({name: name})
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        document.getElementById('new-device-name-inline').value = '';
+        _loadPerantiList();
+        // Tunjuk QR panel untuk device baru
+        _showQR(data.id);
+      }).catch(function(){ alert('Ralat tambah peranti'); });
+      return false;
+    }
+
+    function _loadPerantiList() {
+      fetch('/api/devices').then(function(r){ return r.json(); }).then(function(devices) {
+        var el = document.getElementById('peranti-list');
+        if (!devices.length) {
+          el.innerHTML = '<p class="empty-pick">Tiada peranti. Tambah nombor untuk mula.</p>';
+          return;
+        }
+        el.innerHTML = devices.map(function(d) {
+          var dot = d.status === 'connected' ? '#22c55e' : '#ef4444';
+          var statusTxt = d.status === 'connected' ? 'Bersambung' : (d.status === 'qr' ? 'Tunggu Scan QR' : 'Tidak Bersambung');
+          return '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;display:flex;align-items:center;gap:12px;">'
+            + '<span style="width:10px;height:10px;border-radius:50%;background:'+dot+';flex-shrink:0;"></span>'
+            + '<div style="flex:1;">'
+            + '<div style="font-weight:600;color:#f1f5f9;">'+d.name+'</div>'
+            + '<div style="font-size:0.78rem;color:#64748b;">'+statusTxt+'</div>'
+            + '</div>'
+            + (d.status !== 'connected' ? '<a href="#" style="font-size:0.8rem;color:#22c55e;text-decoration:none;" data-devid="'+d.id+'" class="btn-show-qr">📷 QR</a>' : '')
+            + '</div>';
+        }).join('');
+        // Wire QR buttons
+        document.querySelectorAll('.btn-show-qr').forEach(function(btn) {
+          btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            _showQR(this.getAttribute('data-devid'));
+          });
+        });
+      });
+    }
+
+    function _showQR(deviceId) {
+      var panel = document.getElementById('qr-panel');
+      var container = document.getElementById('qr-container');
+      var statusEl = document.getElementById('qr-status-text');
+      panel.style.display = 'block';
+      container.innerHTML = '<p style="color:#64748b;text-align:center;">Tunggu QR code...<br><small>Mungkin ambil 10-20 saat</small></p>';
+      statusEl.textContent = '';
+      var _qrDeviceId = deviceId;
+      if (window._qrInterval) clearInterval(window._qrInterval);
+      window._qrInterval = setInterval(function() {
+        fetch('/api/devices/'+_qrDeviceId+'/status').then(function(r){ return r.json(); }).then(function(s) {
+          if (s.connected) {
+            clearInterval(window._qrInterval);
+            container.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:3rem;">✅</div><div style="color:#22c55e;font-weight:600;margin-top:8px;">WhatsApp Bersambung!</div></div>';
+            statusEl.textContent = 'Peranti berjaya disambungkan';
+            _loadPerantiList();
+            if (typeof loadDevices === 'function') loadDevices();
+          } else if (s.qr) {
+            container.innerHTML = '<img src="'+s.qr+'" style="max-width:260px;max-height:260px;border-radius:8px;" />';
+            statusEl.textContent = 'Scan dengan WhatsApp → Peranti Tertaut → Taut Peranti';
+          }
+        });
+      }, 3000);
+    }
+
+    // Load on tab switch
+    document.querySelector('[data-tab="peranti"]').addEventListener('click', function() {
+      setTimeout(_loadPerantiList, 100);
+    });
+    </script>
   </div>
 
 </main>
