@@ -92,7 +92,37 @@
       <div style="font-size:1.5rem;font-weight:700;color:#f1f5f9;"><span style="color:#22c55e;">uni</span><span style="color:#64748b;">.</span><span style="color:#94a3b8;">haq</span></div>
       <div style="font-size:0.8rem;color:#64748b;margin-top:4px;">Broadcast Platform</div>
     </div>
-    <form id="login-form" onsubmit="return false;" style="margin:0;">
+    <script>
+    function _loginSubmit(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      var u = document.getElementById('login-username').value.trim();
+      var p = document.getElementById('login-password').value;
+      var errEl = document.getElementById('login-error');
+      errEl.style.display = 'none';
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: u, password: p})
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (!data.success) {
+          errEl.textContent = data.error || 'Log masuk gagal';
+          errEl.style.display = 'block';
+          return;
+        }
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('sidebar-username').textContent = data.username;
+        if (data.role === 'admin' && document.getElementById('btn-user-mgmt'))
+          document.getElementById('btn-user-mgmt').style.display = 'block';
+        if (typeof loadAll === 'function') loadAll();
+        if (typeof loadDevices === 'function') loadDevices().catch(function(){});
+      }).catch(function() {
+        errEl.textContent = 'Ralat sambungan';
+        errEl.style.display = 'block';
+      });
+      return false;
+    }
+    </script>
+    <form id="login-form" onsubmit="_loginSubmit(event); return false;" style="margin:0;">
       <div style="margin-bottom:14px;">
         <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Username</label>
         <input id="login-username" type="text" class="input-field" placeholder="Masukkan username..." autocomplete="username" />
