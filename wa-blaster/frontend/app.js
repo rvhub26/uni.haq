@@ -626,21 +626,31 @@ document.getElementById('tmpl-gap-value').addEventListener('input', updateTmplGa
 document.getElementById('tmpl-gap-unit').addEventListener('change', updateTmplGapPreview);
 updateTmplGapPreview();
 
-// Batch blast toggle + preview
-function toggleBatchSettings(enabled) {
-  document.getElementById('batch-settings').style.display = enabled ? 'block' : 'none';
+// Batch mode state
+let _batchEnabled = false;
 
-  // Style pilihan aktif
-  const noLabel = document.getElementById('batch-no-label');
-  const yesLabel = document.getElementById('batch-yes-label');
-  if (noLabel && yesLabel) {
-    noLabel.style.border = enabled ? '2px solid #334155' : '2px solid #22c55e';
-    noLabel.style.background = enabled ? '#0f172a' : '#22c55e15';
-    noLabel.querySelector('span').style.color = enabled ? '#64748b' : '#f1f5f9';
-    yesLabel.style.border = enabled ? '2px solid #22c55e' : '2px solid #334155';
-    yesLabel.style.background = enabled ? '#22c55e15' : '#0f172a';
-    yesLabel.querySelector('span').style.color = enabled ? '#f1f5f9' : '#94a3b8';
-  }
+function setBatchMode(enabled) {
+  _batchEnabled = enabled;
+
+  const settings = document.getElementById('batch-settings');
+  const noBtn = document.getElementById('batch-no-btn');
+  const yesBtn = document.getElementById('batch-yes-btn');
+  if (!settings || !noBtn || !yesBtn) return;
+
+  settings.style.display = enabled ? 'block' : 'none';
+
+  // Style butang aktif
+  noBtn.style.border = enabled ? '2px solid #334155' : '2px solid #22c55e';
+  noBtn.style.background = enabled ? '#0f172a' : '#22c55e15';
+  noBtn.children[0].style.background = enabled ? 'transparent' : '#22c55e';
+  noBtn.children[0].style.borderColor = enabled ? '#475569' : '#22c55e';
+  noBtn.children[1].style.color = enabled ? '#64748b' : '#f1f5f9';
+
+  yesBtn.style.border = enabled ? '2px solid #22c55e' : '2px solid #334155';
+  yesBtn.style.background = enabled ? '#22c55e15' : '#0f172a';
+  yesBtn.children[0].style.background = enabled ? '#22c55e' : 'transparent';
+  yesBtn.children[0].style.borderColor = enabled ? '#22c55e' : '#475569';
+  yesBtn.children[1].style.color = enabled ? '#f1f5f9' : '#64748b';
 
   if (enabled) updateBatchPreview();
 }
@@ -653,25 +663,27 @@ function updateBatchPreview() {
   const total = allContacts.length;
   const batches = Math.ceil(total / size);
   const previewEl = document.getElementById('batch-preview');
+  if (!previewEl) return;
 
-  if (total && size) {
-    const totalTime = (batches - 1) * gapMs;
-    const hours = Math.round(totalTime / 3600000 * 10) / 10;
-    previewEl.style.display = 'block';
-    previewEl.innerHTML = `
-      <strong style="color:#22c55e;">Anggaran:</strong> ${total} contacts → ${batches} batch × ${size} nombor<br>
-      Masa total: ~${hours} jam | Setiap batch gap: ${formatGap(gapMs)}
-    `;
-  } else {
-    previewEl.style.display = 'none';
+  const totalTime = (batches - 1) * gapMs;
+  const totalHours = Math.round(totalTime / 3600000 * 10) / 10;
+
+  // Bina timeline ringkas
+  let timeline = '';
+  for (let i = 0; i < Math.min(batches, 4); i++) {
+    const from = i * size + 1;
+    const to = Math.min((i + 1) * size, total);
+    timeline += `<div style="margin-bottom:3px;">Batch ${i + 1}: Nombor ${from}–${to}${i < batches - 1 ? ` → rehat ${formatGap(gapMs)}` : ' (habis)'}</div>`;
   }
+  if (batches > 4) timeline += `<div style="color:#475569;">... dan ${batches - 4} batch lagi</div>`;
+
+  previewEl.innerHTML = `
+    <div style="color:#22c55e;font-weight:600;margin-bottom:8px;">Anggaran: ${total} contacts → ${batches} batch × maks ${size} nombor</div>
+    <div style="font-size:0.8rem;line-height:1.7;">${timeline}</div>
+    <div style="margin-top:8px;color:#64748b;font-size:0.78rem;">Masa selesai keseluruhan: ~${totalHours} jam</div>
+  `;
 }
 
-['batch-size', 'batch-gap-value', 'batch-gap-unit'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', updateBatchPreview);
-  if (el) el.addEventListener('change', updateBatchPreview);
-});
 
 document.getElementById('btn-save-schedule').addEventListener('click', async () => {
   const mode = document.querySelector('input[name="sched-mode"]:checked').value;
@@ -688,7 +700,7 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
   const templateGapMs = Number(document.getElementById('tmpl-gap-value').value) * Number(document.getElementById('tmpl-gap-unit').value);
 
   // Batch blast settings
-  const batchEnabled = document.querySelector('input[name="batch-mode"]:checked')?.value === 'yes';
+  const batchEnabled = _batchEnabled;
   const batchSize = batchEnabled ? parseInt(document.getElementById('batch-size').value) || 50 : 0;
   const batchGapMs = batchEnabled
     ? Number(document.getElementById('batch-gap-value').value) * Number(document.getElementById('batch-gap-unit').value)
@@ -719,9 +731,7 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
     const data = await res.json();
     if (!res.ok) { showToast(data.error, 'error'); return; }
     showToast('Jadual berjaya disimpan!');
-    // Reset batch ke "Tidak Perlu"
-    const noRadio = document.querySelector('input[name="batch-mode"][value="no"]');
-    if (noRadio) { noRadio.checked = true; toggleBatchSettings(false); }
+    setBatchMode(false);
     loadSchedules();
   } catch { showToast('Ralat simpan jadual', 'error'); }
 });
