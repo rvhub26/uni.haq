@@ -1,27 +1,29 @@
 const router = require('express').Router();
-const { readJSON, readJSONObject, writeJSON } = require('../store');
+const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('../store');
 
-// GET /api/reports/stats — agregat semua stats
-router.get('/stats', (_req, res) => {
-  const logs = readJSON('logs.json');
-  const sales = readJSON('sales.json');
-  const replies = readJSONObject('replies.json');
+function requireDevice(req, res, next) {
+  if (!req.session.deviceId) return res.status(400).json({ error: 'Pilih peranti WhatsApp dahulu' });
+  next();
+}
+
+function ctx(req) { return { userId: req.session.userId, deviceId: req.session.deviceId }; }
+
+// Agregat stats
+router.get('/stats', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const logs = readDeviceJSON(userId, deviceId, 'logs.json');
+  const sales = readDeviceJSON(userId, deviceId, 'sales.json');
+  const replies = readDeviceJSONObject(userId, deviceId, 'replies.json');
 
   const total = logs.reduce((s, l) => s + (l.sent || 0) + (l.failed || 0), 0);
   const berjaya = logs.reduce((s, l) => s + (l.sent || 0), 0);
   const failed = logs.reduce((s, l) => s + (l.failed || 0), 0);
-
-  const uniqueBlasted = new Set(
-    logs.flatMap(l => (l.details || []).map(d => d.telefon))
-  ).size;
-
+  const uniqueBlasted = new Set(logs.flatMap(l => (l.details || []).map(d => d.telefon))).size;
   const repliedCount = Object.values(replies).filter(r => r.replied).length;
   const totalRM = sales.reduce((s, sale) => s + (parseFloat(sale.amount) || 0), 0);
 
   res.json({
-    total,
-    berjaya,
-    failed,
+    total, berjaya, failed,
     pctBerjaya: total ? Math.round(berjaya / total * 100) : 0,
     pctFailed: total ? Math.round(failed / total * 100) : 0,
     uniqueBlasted,
@@ -32,9 +34,10 @@ router.get('/stats', (_req, res) => {
   });
 });
 
-// GET /api/reports/replies — contacts yang dah balas
-router.get('/replies', (_req, res) => {
-  const replies = readJSONObject('replies.json');
+// Contacts yang dah balas
+router.get('/replies', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const replies = readDeviceJSONObject(userId, deviceId, 'replies.json');
   const list = Object.entries(replies)
     .filter(([, r]) => r.replied)
     .map(([telefon, r]) => ({ telefon, ...r }))
@@ -42,32 +45,35 @@ router.get('/replies', (_req, res) => {
   res.json(list);
 });
 
-// POST /api/reports/replies/manual — manual tandakan contact sebagai dah balas
-router.post('/replies/manual', (req, res) => {
+// Manual tandakan sebagai balas
+router.post('/replies/manual', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
   const { telefon, nama } = req.body;
   if (!telefon) return res.status(400).json({ error: 'Telefon diperlukan' });
-  const replies = readJSONObject('replies.json');
+  const replies = readDeviceJSONObject(userId, deviceId, 'replies.json');
   replies[telefon] = {
     nama: nama || telefon,
     replied: true,
     repliedAt: replies[telefon]?.repliedAt || new Date().toISOString(),
     manual: true,
   };
-  writeJSON('replies.json', replies);
+  writeDeviceJSON(userId, deviceId, 'replies.json', replies);
   res.json({ ok: true });
 });
 
-// GET /api/reports/sales — semua rekod jualan
-router.get('/sales', (_req, res) => {
-  res.json(readJSON('sales.json'));
+// Semua rekod jualan
+router.get('/sales', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  res.json(readDeviceJSON(userId, deviceId, 'sales.json'));
 });
 
-// POST /api/reports/sales — tambah rekod jualan
-router.post('/sales', (req, res) => {
+// Tambah rekod jualan
+router.post('/sales', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
   const { telefon, nama, amount, notes } = req.body;
   if (!amount || isNaN(amount)) return res.status(400).json({ error: 'Jumlah RM diperlukan' });
 
-  const sales = readJSON('sales.json');
+  const sales = readDeviceJSON(userId, deviceId, 'sales.json');
   const entry = {
     id: `sale_${Date.now()}`,
     telefon: telefon || '',
@@ -77,16 +83,17 @@ router.post('/sales', (req, res) => {
     date: new Date().toISOString(),
   };
   sales.unshift(entry);
-  writeJSON('sales.json', sales);
+  writeDeviceJSON(userId, deviceId, 'sales.json', sales);
   res.json(entry);
 });
 
-// DELETE /api/reports/sales/:id — buang rekod jualan
-router.delete('/sales/:id', (req, res) => {
-  const sales = readJSON('sales.json');
+// Buang rekod jualan
+router.delete('/sales/:id', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const sales = readDeviceJSON(userId, deviceId, 'sales.json');
   const filtered = sales.filter(s => s.id !== req.params.id);
   if (filtered.length === sales.length) return res.status(404).json({ error: 'Tidak dijumpai' });
-  writeJSON('sales.json', filtered);
+  writeDeviceJSON(userId, deviceId, 'sales.json', filtered);
   res.json({ ok: true });
 });
 

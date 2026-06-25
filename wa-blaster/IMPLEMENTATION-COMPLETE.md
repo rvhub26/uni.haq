@@ -1,40 +1,81 @@
 # uni.haq — WhatsApp Auto Blast System
-## Dokumentasi Lengkap Projek (Dikemaskini: Jun 2026)
+## Dokumentasi Lengkap Projek (Dikemaskini: 25 Jun 2026)
 
-> **Untuk Claude Code.** Dokumen ini menerangkan sistem yang SUDAH dibina sepenuhnya.
-> Guna sebagai rujukan untuk debug, tambah feature, atau faham struktur projek.
+> **Dokumen ini adalah sumber kebenaran tunggal untuk projek uni.haq.**
+> Guna untuk: debug, tambah feature, recreate sistem di mesin lain, atau pass kepada developer lain.
+> Setiap kali ada perubahan sistem, dokumen ini MESTI dikemaskini.
 
----
+**GitHub Repo:** https://github.com/rvhub26/uni.haq (Public)
+**App aktif:** `wa-blaster/backend/index.js` — port **3001** (local) / **3002** (production)
+**Root `server.js` (port 3000) adalah versi lama, abaikan.**
 
-## RINGKASAN PROJEK
-
-**uni.haq** adalah sistem blast mesej WhatsApp automatik dengan:
-- Upload contacts dari Excel
-- Template mesej yang boleh personalize nama (`{nama}`)
-- Hantar gambar/video + caption
-- Library template — simpan banyak template bernama
-- Rotation — hantar template berbeza setiap hari secara giliran
-- Gap antara nombor — elak ban (contoh: 4 saat antara setiap contact)
-- Gap antara template — mesej drip ke nombor yang sama (contoh: 24 jam)
-- Jadual blast: sekali sahaja atau berulang (harian/mingguan/bulanan)
-- Queue system — semua hantar dijadualkan, boleh pantau dalam dashboard
-- UI: dashboard + sidebar 5 tab
-
-**Pengguna sasaran:** Bukan programmer. Sistem kena senang run dan faham.
+## FEATURE: Multi-Device Per User (v2 — 25 Jun 2026)
+- Setiap user login boleh tambah sehingga **10 nombor WhatsApp** (devices)
+- Setiap device ada contacts, blacklist, jadual, queue, logs sendiri
+- Templates dikongsi sesama devices satu user
+- Device selector dalam sidebar — klik untuk switch
+- Device Manager modal: tambah, switch, reconnect, buang device
+- API: `/api/devices` (GET/POST/DELETE/PUT), `/api/devices/:id/select`
+- Data: `data/{userId}/{deviceId}/contacts.json` dll
+- Auth: `auth/{userId}/{deviceId}/` (Baileys session per device)
 
 ---
 
-## CARA RUN
+## PRINSIP TERAS — ANTI-BAN
+
+> **Setiap feature berkaitan blast MESTI dibina dengan anti-ban sebagai prioriti.**
+> WhatsApp boleh ban nombor yang hantar secara tidak natural. Sistem kena simulate tingkah laku manusia.
+
+### Strategi Anti-Ban Semasa (Dah Ada)
+- Gap antara nombor (contactGapMs) — default 4 saat
+- Gap antara template (templateGapMs) — drip campaign
+- Deduplicate contacts sebelum queue — elak hantar dua kali ke nombor sama
+
+### Strategi Anti-Ban Dirancang (Belum Bina)
+- Random gap — bukan exact 4 saat, tapi random dalam julat (cth: 3–7 saat)
+- Daily limit cap — max X nombor sehari, lebihan queue ke esok
+- Warm-up mode — nombor baru start slow (10/hari → 30/hari → 100/hari)
+- Blacklist/opt-out — kalau contact balas "STOP", auto skip
+- Time-window blast — blast hanya antara jam tertentu (cth: 9am–6pm)
+- Typing indicator simulate — lebih natural
+- Rotate multi-nombor — gilir-gilir blast antara beberapa nombor
+
+### Panduan Risiko Ban
+| Tindakan | Risiko |
+|----------|--------|
+| Gap < 2 saat | Sangat Tinggi |
+| Gap exact sama tiap kali | Sederhana |
+| Gap random 3–7 saat | Rendah |
+| > 200 nombor/hari (nombor baru) | Tinggi |
+| Mesej sama persis ke semua | Tinggi |
+| Mesej dengan {nama} berbeza | Rendah |
+| Nombor < 6 bulan | Tinggi |
+| Nombor > 1 tahun aktif | Rendah |
+
+---
+
+## VISI AKHIR SISTEM
+
+1. **Online 24/7** — deploy ke VPS, bukan localhost
+2. **Mobile responsive** — tim boleh akses dan guna dari telefon
+3. **Dual provider blasting:**
+   - Unofficial: Baileys (current, free, risiko ban)
+   - Official: WhatsApp Business API / Meta Cloud API (no ban, kena daftar Meta)
+4. **Web app** — boleh guna dari mana-mana browser
+
+---
+
+## CARA RUN (SEMASA)
 
 ```bash
 cd wa-blaster/backend
 npm install        # hanya kali pertama
-npm start          # atau: node index.js
+node index.js      # atau: npm start
 ```
 
 Buka browser: **http://localhost:3001**
 
-> Port: 3001 (bukan 3000, sebab ada projek lain di port itu)
+> Port 3001. Root server.js (port 3000) adalah versi lama — jangan guna.
 
 ---
 
@@ -68,12 +109,12 @@ wa-blaster/
 │   ├── templateEngine.js     # processTemplate(text, contact) — replace {nama} dll
 │   ├── routes/
 │   │   ├── whatsapp.js       # GET /api/status, GET /api/qr
-│   │   ├── contacts.js       # CRUD contacts + POST /upload (Excel)
+│   │   ├── contacts.js       # CRUD contacts + POST /upload + DELETE /group/:name
 │   │   ├── media.js          # Upload/list/delete media files
 │   │   ├── templates.js      # CRUD template library
 │   │   └── schedules.js      # CRUD jadual + blast-now + queue
 │   ├── data/
-│   │   ├── contacts.json     # Senarai contacts
+│   │   ├── contacts.json     # Senarai contacts (ada field kumpulan)
 │   │   ├── templates.json    # Template library
 │   │   ├── schedules.json    # Jadual blast
 │   │   ├── logs.json         # Sejarah blast
@@ -86,8 +127,9 @@ wa-blaster/
 │   ├── style.css             # Layout sidebar, kad, table, form styles
 │   └── app.js                # Semua logic frontend (fetch, render, event handlers)
 ├── sample-contacts.xlsx      # Contoh fail Excel
-├── .gitignore                # Exclude node_modules, auth/, uploads/
-└── IMPLEMENTATION-COMPLETE.md
+├── .gitignore                # Exclude node_modules, auth/, data/*.json
+├── IMPLEMENTATION-COMPLETE.md  ← DOKUMEN INI
+└── PLAN.md                   # (deprecated — semua maklumat dah dipindah ke sini)
 ```
 
 ---
@@ -100,18 +142,21 @@ wa-blaster/
   {
     "id": "1234567890_0",
     "nama": "Ahmad Rizal",
-    "telefon": "601112223333"
+    "telefon": "601112223333",
+    "kumpulan": "Customer VVIP"
   }
 ]
 ```
+> **Penting:** Field `kumpulan` wajib ada. Setiap Excel upload = satu kumpulan.
+> Contacts lama tanpa field `kumpulan` akan dipaparkan sebagai "Umum".
 
 ### templates.json
 ```json
 [
   {
     "id": "tmpl_1234567890",
-    "name": "Hari 1 — Promosi Raya",
-    "text": "Hai {nama}, kami ada tawaran istimewa untuk anda!",
+    "name": "Hari 1 — Promosi",
+    "text": "Hai {nama}, kami ada tawaran istimewa!",
     "mediaFile": "abc123.jpg",
     "createdAt": "2026-06-17T08:00:00.000Z"
   }
@@ -124,66 +169,27 @@ wa-blaster/
   {
     "id": "sch_1234567890",
     "useRotation": true,
-    "templateIds": ["tmpl_aaa", "tmpl_bbb", "tmpl_ccc"],
-    "rotationIndex": 2,
+    "templateIds": ["tmpl_aaa", "tmpl_bbb"],
+    "rotationIndex": 0,
     "template": null,
     "mediaFile": null,
-    "type": "recurring",
-    "datetime": null,
-    "pattern": {
-      "frequency": "daily",
-      "time": "09:00"
-    },
+    "type": "one-time",
+    "datetime": "2026-06-24T09:00:00.000Z",
     "contacts": "all",
     "contactGapMs": 4000,
     "templateGapMs": 86400000,
     "status": "active",
-    "createdAt": "2026-06-17T08:00:00.000Z"
+    "createdAt": "2026-06-24T08:00:00.000Z"
   }
 ]
 ```
 
-**Field penting:**
-- `useRotation` — true = guna rotation template, false = satu template tetap
-- `templateIds` — array ID template untuk rotation (ikut urutan)
-- `rotationIndex` — template mana seterusnya (auto-increment setiap blast)
-- `contactGapMs` — delay antara contact (elak ban, biasanya 4000ms)
-- `templateGapMs` — delay antara template ke nombor yang SAMA (drip campaign)
-- `contacts` — `"all"` atau array ID contact tertentu
+> **Field contacts boleh jadi:**
+> - `"all"` — semua contacts
+> - `{ "kumpulan": ["Customer VVIP", "Customer Jun"] }` — contacts dari kumpulan tertentu
 
-### queue.json
-```json
-[
-  {
-    "id": "q_123_t0_c0",
-    "scheduleId": "sch_xxx",
-    "nama": "Ahmad",
-    "telefon": "601112223333",
-    "templateText": "Hai Ahmad, ada promosi!",
-    "mediaFile": "abc123.jpg",
-    "sendAt": 1750000000000,
-    "status": "pending",
-    "createdAt": "2026-06-17T08:00:00.000Z"
-  }
-]
-```
-
-### logs.json
-```json
-[
-  {
-    "id": "log_1234567890",
-    "scheduleId": "sch_xxx",
-    "template": "Hai Ahmad...",
-    "blastAt": "2026-06-17T09:00:00.000Z",
-    "sent": 10,
-    "failed": 0,
-    "details": [
-      { "nama": "Ahmad", "telefon": "601...", "status": "sent" }
-    ]
-  }
-]
-```
+### queue.json & logs.json
+Sama seperti sebelum — rujuk kod untuk struktur penuh.
 
 ---
 
@@ -199,11 +205,32 @@ wa-blaster/
 | Method | URL | Fungsi |
 |--------|-----|--------|
 | GET | `/api/contacts` | Semua contacts |
-| POST | `/api/contacts/upload` | Upload Excel (multipart, field: `file`) |
+| POST | `/api/contacts/upload` | Upload Excel (multipart: `file` + `kumpulan`) |
+| DELETE | `/api/contacts/group/:name` | Buang semua contacts dalam satu kumpulan |
 | DELETE | `/api/contacts/:id` | Buang satu contact |
 | DELETE | `/api/contacts` | Kosongkan semua |
+| GET | `/api/contacts/history` | Lihat sent history per contact |
+| DELETE | `/api/contacts/history/group/:name` | Reset sent history untuk satu kumpulan |
+| DELETE | `/api/contacts/history` | Reset semua sent history |
 
-**Upload Excel format:** Fail `.xlsx`/`.xls` dengan header kolum `nama` dan `telefon`
+### Blacklist
+| Method | URL | Fungsi |
+|--------|-----|--------|
+| GET | `/api/blacklist` | Semua nombor dalam blacklist |
+| POST | `/api/blacklist` | Tambah ke blacklist `{ telefon, nama, sebab }` |
+| DELETE | `/api/blacklist/:telefon` | Buang dari blacklist (unblock) |
+
+### Reports
+| Method | URL | Fungsi |
+|--------|-----|--------|
+| GET | `/api/reports/stats` | Statistik agregat (total blast, berjaya, gagal, reply, sales) |
+| GET | `/api/reports/replies` | Senarai contacts yang dah reply |
+| GET | `/api/reports/sales` | Semua rekod jualan |
+| POST | `/api/reports/sales` | Tambah rekod jualan `{ nama, amount, notes }` |
+| DELETE | `/api/reports/sales/:id` | Buang rekod jualan |
+
+> **Upload Excel format:** Fail `.xlsx`/`.xls` dengan header `nama` dan `telefon`.
+> Field `kumpulan` dihantar sebagai form field (bukan dalam Excel).
 
 ### Templates
 | Method | URL | Fungsi |
@@ -220,8 +247,6 @@ wa-blaster/
 | GET | `/api/media` | Senarai media |
 | DELETE | `/api/media/:filename` | Buang fail media |
 
-**Jenis fail diterima:** JPG, PNG, GIF, WEBP, MP4, MOV
-
 ### Schedules
 | Method | URL | Fungsi |
 |--------|-----|--------|
@@ -235,172 +260,120 @@ wa-blaster/
 
 ---
 
-## FLOW UTAMA
-
-### 1. Sambungan WhatsApp
-```
-index.js startup
-  → connectWhatsApp()
-  → makeWASocket + useMultiFileAuthState('./auth')
-  → connection.update event:
-      - ada QR → simpan sebagai base64 → frontend poll /api/qr
-      - connection open → status = 'connected'
-      - connection close → auto-reconnect (kecuali logout/401)
-```
-
-### 2. Blast Biasa (satu template)
-```
-User klik "Blast Sekarang"
-  → POST /api/schedules/:id/blast-now
-  → runBlast(schedule)
-  → enqueueBlast({ contacts, templateText, mediaFile, gapMs })
-  → queue.json: setiap contact dapat sendAt = now + i * gapMs
-  → cron setiap minit: processQueue()
-  → sendMessage() atau sendMedia() bila masa tiba
-  → catat dalam logs.json
-```
-
-### 3. Rotation + Template Gap (drip campaign)
-```
-User pilih rotation + templateGapMs
-  → POST /api/schedules/:id/blast-now
-  → runBlast(schedule) — detect useRotation && templateGapMs > 0
-  → enqueueRotationBlast({ contacts, templates, contactGapMs, templateGapMs })
-  → queue.json:
-      Template 1, Contact A: sendAt = now + 0
-      Template 1, Contact B: sendAt = now + contactGapMs
-      Template 2, Contact A: sendAt = now + templateGapMs
-      Template 2, Contact B: sendAt = now + templateGapMs + contactGapMs
-      ...
-  → cron setiap minit: processQueue() hantar yang dah tiba masa
-```
-
-### 4. Jadual Berulang (recurring)
-```
-restoreJobs() masa server start → reload semua jadual aktif
-cron '* * * * *' setiap minit:
-  → timeMatches(schedule.pattern) → true bila jam & hari sepadan
-  → runBlast(schedule) → enqueue contacts
-```
-
----
-
 ## FRONTEND — STRUKTUR TAB
 
 ```
 Sidebar kiri (fixed, 220px)
 ├── 🏠 Dashboard    — status WA, 4 stat cards, log terkini
-├── 👥 Contacts     — upload Excel, jadual contact, delete
+├── 👥 Contacts     — upload Excel + nama kumpulan, papar by group, delete group
 ├── 📝 Templates    — form tambah/edit template, senarai
-├── 📅 Jadual Blast — form buat jadual, senarai jadual
+├── 📅 Jadual Blast — form 4 step: template → masa mula → hantar kepada → gap
 └── ⏳ Queue & Log  — pending queue, sejarah blast
 ```
 
-**Branding:** uni.haq (logo SVG paper plane + gradient hijau)
+### Jadual Blast — Form Steps
+1. Pilih Template (Satu Template atau Rotation gilir-gilir)
+2. Masa Mula (optional — kosong = blast sekarang)
+3. Hantar Kepada: Semua Contacts / Pilih Kumpulan
+4. Gap Antara Setiap Nombor
+
+> **Nota:** Tiada pilihan "Sekali/Berulang" — semua blast adalah one-time sequential.
+> Tiada "Pilih Individu" — hanya pilih by kumpulan atau semua.
 
 ---
 
-## MODUL BACKEND — RINGKASAN FUNGSI
+## FLOW UTAMA
 
-### `whatsapp.js`
-```js
-connectWhatsApp()     // sambung ke WA, handle QR & reconnect
-getStatus()           // { connected: bool, status: string }
-getQR()               // base64 QR image atau null
-sendMessage(phone, text)              // hantar teks
-sendMedia(phone, filePath, caption)   // hantar gambar/video
+### Blast dengan Rotation + Gap Template (cara utama)
+```
+User simpan jadual (Step 1-4)
+  → POST /api/schedules → scheduleJob()
+  → delay <= 0 → runBlast() terus
+  → deduplicate contacts by phone
+  → enqueueRotationBlast()
+  → queue.json: T1→semua contacts, T2→semua contacts+templateGap, ...
+  → cron setiap minit: processQueue()
+  → hantar bila sendAt <= now
+  → catat logs.json
 ```
 
-### `store.js`
-```js
-readJSON(filename)           // baca dari data/, return [] kalau tak ada
-writeJSON(filename, data)    // tulis ke data/
-```
+---
 
-### `templateEngine.js`
-```js
-processTemplate(template, contact)
-// "Hai {nama}!" + { nama: "Ahmad" } → "Hai Ahmad!"
-// Support: {nama}, {telefon}
-```
+## CHECKLIST FEATURE SEMASA
 
-### `queue.js`
-```js
-enqueueBlast({ scheduleId, contacts, templateText, mediaFile, gapMs, startAt })
-// Queue satu template → semua contacts dengan delay gapMs antara setiap satu
+- [x] Server Express port 3001
+- [x] Frontend SPA sidebar 5 tab
+- [x] Branding uni.haq (logo SVG, dark theme)
+- [x] WhatsApp QR scan & connect (Baileys)
+- [x] Session tersimpan (restart tak perlu scan)
+- [x] Auto-reconnect (kecuali ban/401)
+- [x] Upload Excel + nama kumpulan
+- [x] Contacts dipapar by kumpulan, delete by kumpulan
+- [x] Template library — simpan, edit, padam
+- [x] Upload media per template (gambar/video)
+- [x] Template engine — {nama}, {telefon}
+- [x] Jadual blast one-time dengan masa mula optional
+- [x] Rotation template ikut turutan
+- [x] Gap antara nombor (anti-ban)
+- [x] Gap antara template (drip campaign)
+- [x] Deduplicate contacts sebelum queue
+- [x] Sent history tracking — skip template yang dah pernah hantar per contact
+- [x] Reset sent history per kumpulan atau semua
+- [x] Blacklist / Do Not Contact — blacklist contact, auto-skip bila blast, unblock bila perlu
+- [x] Search contacts — cari nama atau nombor merentasi semua kumpulan
+- [x] Tab Laporan — stats (blast/berjaya/gagal/reply/sales), auto-detect reply, rekod close sales (RM)
+- [x] Queue system — hantar ikut timing
+- [x] Log blast
+- [x] Dashboard stats
 
-enqueueRotationBlast({ scheduleId, contacts, templates, contactGapMs, templateGapMs, startAt })
-// Queue SEMUA templates × semua contacts dengan dua jenis gap
+---
 
-processQueue()
-// Hantar semua queue item yang sendAt <= now
-// Dipanggil setiap minit oleh cron
+## ROADMAP
 
-getQueueStatus()       // pending items untuk display
-cancelQueueForSchedule(id)  // buang pending items untuk satu jadual
-```
+### Fasa 2 — Polish & Anti-Ban (Brainstorm belum mula build)
+- [ ] Random gap antara nombor (bukan exact, dalam julat)
+- [ ] Daily limit cap — max X nombor sehari
+- [ ] Time-window blast — blast hanya dalam jam tertentu
+- [ ] Mobile responsive UI
+- [ ] Login / password protect
+- [ ] Preview mesej sebelum blast
+- [ ] Stop / pause jadual aktif
+- [ ] Export log ke Excel
 
-### `scheduler.js`
-```js
-scheduleJob(schedule)   // daftar jadual (setTimeout atau cron)
-cancelJob(id)           // batalkan jadual
-restoreJobs()           // dipanggil masa startup, reload jadual aktif
-runBlast(schedule)      // tentukan template, queue contacts
-```
+### Fasa 3 — Deploy Online
+- [ ] Push ke GitHub → setup VPS
+- [ ] GitHub Actions auto-deploy
+- [ ] Setup domain
+- [ ] Test akses dari telefon
+
+### Fasa 4 — Official WhatsApp API
+- [ ] Daftar Meta Business + WhatsApp Business API
+- [ ] Provider layer (abstract Baileys vs Meta API)
+- [ ] Settings page — pilih provider
+- [ ] Template approval flow (untuk official API)
 
 ---
 
 ## NOTA PENTING
 
-1. **Risiko ban:** Baileys guna sambungan tidak rasmi. Guna nombor spare. Delay 4 saat membantu tapi tidak jamin 100%.
-
+1. **Ban risk:** Baileys adalah tidak rasmi. Guna nombor spare, bukan nombor bisnes utama.
 2. **Session:** Folder `auth/` simpan login. Jangan share atau commit ke Git.
-
-3. **Port:** Server guna port **3001** (bukan 3000).
-
-4. **Queue persistence:** Queue disimpan dalam `queue.json`. Bila server restart, cron akan terus process queue yang tertinggal.
-
-5. **Rotation index:** `rotationIndex` dalam schedules.json dikemaskini setiap kali blast (mod rotation tanpa templateGap). Untuk rotation dengan templateGap, semua template diqueue sekaligus.
-
-6. **Media path:** Media disimpan dalam `backend/uploads/`. Bila hantar, path dibina: `path.join(__dirname, UPLOAD_DIR, mediaFile)`.
-
-7. **Hosting 24/7:** Untuk jadual jalan walaupun laptop tutup, perlu VPS. Sekarang server perlu hidup untuk scheduler berfungsi.
+3. **Port:** Server guna port **3001**.
+4. **Queue persistence:** Queue dalam `queue.json`. Server restart, queue terus diproses.
+5. **Hosting:** Untuk jadual jalan 24/7, perlu VPS. Sekarang server kena hidup.
+6. **Bila kena ban:** Status 401 → sistem tidak reconnect → perlu scan QR baru.
 
 ---
 
-## FEATURE YANG BELUM ADA (untuk masa depan)
+## LOG PERUBAHAN
 
-- [ ] Export log ke Excel
-- [ ] Preview queue — tunjuk jadual bila setiap nombor dapat mesej
-- [ ] Multi-user / sistem login
-- [ ] Tambah contact secara manual (tanpa Excel)
-- [ ] Duplicate/copy template
-- [ ] Stop/pause jadual sementara
-- [ ] Statistik blast (open rate, dll — tidak boleh dengan Baileys)
-- [ ] Hosting 24/7 di VPS
-
----
-
-## CHECKLIST SEMUA FEATURE
-
-- [x] Server Express jalan di localhost:3001
-- [x] Frontend SPA dengan sidebar 5 tab
-- [x] Branding: uni.haq (logo SVG)
-- [x] WhatsApp QR scan & connect
-- [x] Session tersimpan (restart tak perlu scan semula)
-- [x] Auto-reconnect bila putus
-- [x] Upload Excel (nama + telefon), validate nombor Malaysia
-- [x] Senarai contact, delete, kosongkan semua
-- [x] Template library — simpan, edit, padam template bernama
-- [x] Upload media (gambar/video) per template
-- [x] Template engine — {nama}, {telefon}
-- [x] Jadual blast: sekali sahaja (one-time)
-- [x] Jadual blast: berulang harian / mingguan / bulanan
-- [x] Pilih contacts: semua atau tertentu
-- [x] Rotation — gilir-gilir template mengikut urutan
-- [x] Gap antara nombor (contactGapMs) — anti-ban
-- [x] Gap antara template (templateGapMs) — drip campaign
-- [x] Queue system — hantar mengikut timing, pantau pending
-- [x] Log blast — rekod setiap hantar
-- [x] Blast segera (blast-now) tanpa tunggu jadual
-- [x] Dashboard dengan stats (contacts, templates, jadual aktif, queue)
+| Tarikh | Perubahan |
+|--------|-----------|
+| 24 Jun 2026 | Initial system — core blast, templates, queue, rotation |
+| 24 Jun 2026 | Contacts kumpulan system — setiap Excel = satu kumpulan |
+| 24 Jun 2026 | Simplify Jadual Blast — buang Sekali/Berulang, buang Pilih Individu |
+| 24 Jun 2026 | Fix double-send — deduplicate contacts by phone |
+| 24 Jun 2026 | Masa Mula jadi optional (kosong = blast sekarang) |
+| 24 Jun 2026 | Sent history tracking — skip template dah hantar, reset per kumpulan |
+| 24 Jun 2026 | Blacklist & search contacts — blacklist auto-skip blast, cari nama/nombor |
+| 24 Jun 2026 | Tab Laporan — stats cards, auto-detect reply, rekod close sales RM, senarai replies |

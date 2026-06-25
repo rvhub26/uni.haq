@@ -1,33 +1,30 @@
 const cron = require('node-cron');
-const { readJSON, readJSONObject, writeJSON } = require('./store');
-const { getStatus } = require('./whatsapp');
+const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON, readUserJSON, readJSON } = require('./store');
+const { getDeviceStatus } = require('./whatsapp');
 const { enqueueBlast, enqueueRotationBlast, processQueue } = require('./queue');
 
-const activeJobs = new Map();
+const activeJobs = new Map(); // key: scheduleId
 
-// Tentukan template & media untuk satu schedule (sokong rotation)
-function resolveTemplate(schedule) {
+function resolveTemplate(schedule, userId, deviceId) {
   if (schedule.useRotation && schedule.templateIds?.length) {
-    const templates = readJSON('templates.json');
+    const templates = readUserJSON(userId, 'templates.json');
     const idx = (schedule.rotationIndex || 0) % schedule.templateIds.length;
     const tmpl = templates.find(t => t.id === schedule.templateIds[idx]);
     if (!tmpl) throw new Error(`Template rotation ke-${idx + 1} tidak dijumpai`);
 
-    // Tambah index rotation untuk kali seterusnya
-    const list = readJSON('schedules.json');
+    const list = readDeviceJSON(userId, deviceId, 'schedules.json');
     const si = list.findIndex(s => s.id === schedule.id);
-    if (si >= 0) { list[si].rotationIndex = idx + 1; writeJSON('schedules.json', list); }
+    if (si >= 0) { list[si].rotationIndex = idx + 1; writeDeviceJSON(userId, deviceId, 'schedules.json', list); }
 
     return { templateId: tmpl.id, templateText: tmpl.text, mediaFile: tmpl.mediaFile || null };
   }
   return { templateId: null, templateText: schedule.template, mediaFile: schedule.mediaFile || null };
 }
 
-// Masukkan contacts ke queue dan mulakan drip send
-async function runBlast(schedule) {
-  if (!getStatus().connected) throw new Error('WhatsApp tidak bersambung');
+async function runBlast(schedule, userId, deviceId) {
+  if (!getDeviceStatus(userId, deviceId).connected) throw new Error('WhatsApp tidak bersambung');
 
-  const allContacts = readJSON('contacts.json');
+  const allContacts = readDeviceJSON(userId, deviceId, 'contacts.json');
   const raw = schedule.contacts === 'all'
     ? allContacts
     : Array.isArray(schedule.contacts)
@@ -36,16 +33,10 @@ async function runBlast(schedule) {
         ? allContacts.filter(c => schedule.contacts.kumpulan.includes(c.kumpulan || 'Umum'))
         : allContacts;
 
-  // Deduplicate by phone — elak hantar 2 kali ke nombor sama
   const seen = new Set();
-  const deduped = raw.filter(c => {
-    if (seen.has(c.telefon)) return false;
-    seen.add(c.telefon);
-    return true;
-  });
+  const deduped = raw.filter(c => { if (seen.has(c.telefon)) return false; seen.add(c.telefon); return true; });
 
-  // Filter blacklist
-  const blacklist = readJSON('blacklist.json');
+  const blacklist = readDeviceJSON(userId, deviceId, 'blacklist.json');
   const blacklistSet = new Set(blacklist.map(b => b.telefon));
   const targets = deduped.filter(c => !blacklistSet.has(c.telefon));
 
@@ -54,34 +45,17 @@ async function runBlast(schedule) {
   const contactGapMs = schedule.contactGapMs || 4000;
   const templateGapMs = schedule.templateGapMs || 0;
 
-  // Rotation + templateGapMs: queue SEMUA template sekaligus dengan gap
   if (schedule.useRotation && schedule.templateIds?.length && templateGapMs > 0) {
-    const allTmpl = readJSON('templates.json');
+    const allTmpl = readUserJSON(userId, 'templates.json');
     const templates = schedule.templateIds.map(id => allTmpl.find(t => t.id === id)).filter(Boolean);
     if (!templates.length) throw new Error('Template tidak dijumpai');
 
-    const count = enqueueRotationBlast({
-      scheduleId: schedule.id,
-      contacts: targets,
-      templates,
-      contactGapMs,
-      templateGapMs,
-      startAt: Date.now(),
-    });
+    const count = enqueueRotationBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templates, contactGapMs, templateGapMs, startAt: Date.now() });
     return { queued: count, contactGapMs, templateGapMs, templates: templates.length };
   }
 
-  // Mod biasa: satu template sahaja (atau rotation tanpa templateGap)
-  const { templateText, mediaFile, templateId } = resolveTemplate(schedule);
-  const count = enqueueBlast({
-    scheduleId: schedule.id,
-    contacts: targets,
-    templateText,
-    mediaFile,
-    templateId,
-    gapMs: contactGapMs,
-    startAt: Date.now(),
-  });
+  const { templateText, mediaFile, templateId } = resolveTemplate(schedule, userId, deviceId);
+  const count = enqueueBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templateText, mediaFile, templateId, gapMs: contactGapMs, startAt: Date.now() });
   return { queued: count, gapMs: contactGapMs };
 }
 
@@ -95,35 +69,35 @@ function timeMatches(pattern) {
   return false;
 }
 
-function scheduleJob(schedule) {
+function scheduleJob(schedule, userId, deviceId) {
   if (activeJobs.has(schedule.id)) return;
 
   if (schedule.type === 'one-time') {
     const delay = new Date(schedule.datetime).getTime() - Date.now();
     if (delay <= 0) {
-      runBlast(schedule).then(() => markDone(schedule.id)).catch(() => {});
+      runBlast(schedule, userId, deviceId).then(() => markDone(schedule.id, userId, deviceId)).catch(() => {});
       return;
     }
     const timer = setTimeout(() => {
-      runBlast(schedule).then(() => markDone(schedule.id)).catch(() => {});
+      runBlast(schedule, userId, deviceId).then(() => markDone(schedule.id, userId, deviceId)).catch(() => {});
       activeJobs.delete(schedule.id);
     }, delay);
     activeJobs.set(schedule.id, { type: 'timeout', ref: timer });
   } else {
     const job = cron.schedule('* * * * *', () => {
-      const latest = readJSON('schedules.json').find(s => s.id === schedule.id);
+      const latest = readDeviceJSON(userId, deviceId, 'schedules.json').find(s => s.id === schedule.id);
       if (latest && timeMatches(latest.pattern)) {
-        runBlast(latest).catch(() => {});
+        runBlast(latest, userId, deviceId).catch(() => {});
       }
     });
     activeJobs.set(schedule.id, { type: 'cron', ref: job });
   }
 }
 
-function markDone(id) {
-  const list = readJSON('schedules.json');
+function markDone(id, userId, deviceId) {
+  const list = readDeviceJSON(userId, deviceId, 'schedules.json');
   const idx = list.findIndex(s => s.id === id);
-  if (idx >= 0) { list[idx].status = 'done'; writeJSON('schedules.json', list); }
+  if (idx >= 0) { list[idx].status = 'done'; writeDeviceJSON(userId, deviceId, 'schedules.json', list); }
 }
 
 function cancelJob(id) {
@@ -134,16 +108,34 @@ function cancelJob(id) {
   activeJobs.delete(id);
 }
 
-function restoreJobs() {
-  const list = readJSON('schedules.json');
-  list.filter(s => s.status === 'active').forEach(scheduleJob);
+// Restore semua schedules untuk semua users + devices
+function restoreAllJobs() {
+  const users = readJSON('users.json');
+  let total = 0;
 
-  // Cron setiap minit: proses queue + semak jadual recurring
-  cron.schedule('* * * * *', () => {
-    processQueue().catch(() => {});
+  for (const user of users) {
+    const devices = readUserJSON(user.id, 'devices.json');
+    for (const device of devices) {
+      const schedules = readDeviceJSON(user.id, device.id, 'schedules.json');
+      schedules.filter(s => s.status === 'active').forEach(s => {
+        scheduleJob(s, user.id, device.id);
+        total++;
+      });
+    }
+  }
+
+  // Cron setiap minit: proses semua queues
+  cron.schedule('* * * * *', async () => {
+    const allUsers = readJSON('users.json');
+    for (const user of allUsers) {
+      const devices = readUserJSON(user.id, 'devices.json');
+      for (const dev of devices) {
+        await processQueue(user.id, dev.id).catch(() => {});
+      }
+    }
   });
 
-  console.log(`${list.filter(s => s.status === 'active').length} jadual dipulihkan`);
+  console.log(`${total} jadual dipulihkan`);
 }
 
-module.exports = { scheduleJob, cancelJob, restoreJobs, runBlast };
+module.exports = { scheduleJob, cancelJob, restoreAllJobs, runBlast };

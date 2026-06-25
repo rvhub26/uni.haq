@@ -143,20 +143,21 @@ async function checkStatus() {
   try {
     const data = await fetch('/api/status').then(r => r.json());
     const badge = document.getElementById('status-badge');
-    const dot = document.getElementById('nav-status-dot');
-    const navText = document.getElementById('nav-status-text');
     const waLabel = document.getElementById('wa-status-label');
+
+    if (!data || data.status === 'no_device') {
+      if (badge) { badge.textContent = 'Tiada Peranti'; badge.className = 'badge disconnected'; }
+      if (waLabel) waLabel.textContent = 'Tambah peranti WhatsApp dahulu';
+      return;
+    }
 
     const label = data.connected ? 'Connected ✓'
       : data.status === 'qr' ? 'Scan QR'
       : data.status === 'connecting' ? 'Menyambung...' : 'Tidak Bersambung';
     const cls = data.connected ? 'connected' : data.status === 'connecting' ? 'connecting' : 'disconnected';
 
-    badge.textContent = label;
-    badge.className = `badge ${cls}`;
-    dot.className = `status-dot ${cls}`;
-    navText.textContent = label;
-    waLabel.textContent = data.connected ? 'Bersambung dengan WhatsApp' : 'Belum bersambung';
+    if (badge) { badge.textContent = label; badge.className = `badge ${cls}`; }
+    if (waLabel) waLabel.textContent = data.connected ? 'Bersambung dengan WhatsApp' : 'Belum bersambung';
 
     const qrSection = document.getElementById('qr-section');
     if (data.connected) {
@@ -934,6 +935,128 @@ function renderSales(sales) {
   `;
 }
 
+// ── Device Management ──────────────────────────────────
+let devicesList = [];
+
+async function loadDevices() {
+  devicesList = await fetch('/api/devices').then(r => r.json()).catch(() => []);
+  renderDeviceSelector();
+  renderDevicesList();
+}
+
+function renderDeviceSelector() {
+  const current = devicesList.find(d => d.isCurrent) || devicesList[0];
+  const nameEl = document.getElementById('device-selector-name');
+  const dotEl = document.getElementById('device-status-dot');
+
+  if (!current) {
+    nameEl.textContent = 'Tiada peranti — klik untuk tambah';
+    dotEl.style.background = '#ef4444';
+    return;
+  }
+
+  nameEl.textContent = current.name;
+  dotEl.style.background = current.connected ? '#22c55e'
+    : current.status === 'qr' ? '#f59e0b'
+    : current.status === 'connecting' ? '#3b82f6'
+    : '#ef4444';
+}
+
+function renderDevicesList() {
+  const el = document.getElementById('devices-list-mgmt');
+  if (!el) return;
+
+  if (!devicesList.length) {
+    el.innerHTML = '<p class="empty-pick">Tiada peranti lagi. Tambah nombor WhatsApp untuk mula.</p>';
+    return;
+  }
+
+  el.innerHTML = devicesList.map(d => {
+    const statusColor = d.connected ? '#22c55e' : d.status === 'qr' ? '#f59e0b' : d.status === 'connecting' ? '#3b82f6' : '#ef4444';
+    const statusText = d.connected ? 'Connected' : d.status === 'qr' ? 'Scan QR' : d.status === 'connecting' ? 'Menyambung...' : 'Tidak Bersambung';
+
+    return `
+    <div style="background:#0f172a;border:1px solid ${d.isCurrent ? '#22c55e40' : '#1e293b'};border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${statusColor};flex-shrink:0;"></span>
+        <span style="color:#f1f5f9;font-weight:600;flex:1;">${escHtml(d.name)}</span>
+        ${d.isCurrent ? '<span style="font-size:0.7rem;padding:2px 8px;background:#22c55e20;color:#22c55e;border-radius:4px;">AKTIF</span>' : ''}
+        <span style="font-size:0.78rem;color:${statusColor};">${statusText}</span>
+      </div>
+
+      ${d.status === 'qr' && d.qr ? `
+        <div style="text-align:center;margin-bottom:10px;">
+          <p style="font-size:0.78rem;color:#64748b;margin-bottom:8px;">Scan dengan WhatsApp → Peranti Terpaut → Tambah Peranti</p>
+          <img src="${d.qr}" style="width:180px;height:180px;border-radius:8px;" />
+        </div>
+      ` : ''}
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${!d.isCurrent ? `<button onclick="selectDevice('${d.id}')" class="btn-primary" style="font-size:0.78rem;padding:5px 12px;">Guna Peranti Ini</button>` : ''}
+        ${!d.connected && d.status !== 'qr' ? `<button onclick="reconnectDevice('${d.id}')" class="btn-secondary" style="font-size:0.78rem;padding:5px 12px;">Sambung Semula</button>` : ''}
+        <button onclick="deleteDevice('${d.id}','${escHtml(d.name)}')" class="btn-danger" style="font-size:0.78rem;padding:5px 12px;">🗑 Buang</button>
+      </div>
+    </div>
+  `}).join('');
+}
+
+function showDeviceMgmt() {
+  document.getElementById('device-mgmt-modal').style.display = 'flex';
+  loadDevices();
+}
+
+function closeDeviceMgmt() {
+  document.getElementById('device-mgmt-modal').style.display = 'none';
+}
+
+async function addDevice() {
+  const name = document.getElementById('new-device-name').value.trim();
+  if (!name) { showToast('Sila masukkan nama peranti', 'error'); return; }
+
+  const res = await fetch('/api/devices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) { showToast(data.error, 'error'); return; }
+
+  document.getElementById('new-device-name').value = '';
+  showToast(`Peranti "${name}" ditambah. Tunggu QR muncul...`);
+
+  // Poll for QR
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    await loadDevices();
+    const dev = devicesList.find(d => d.id === data.id);
+    if (dev?.status === 'qr' || dev?.connected || attempts++ > 15) clearInterval(poll);
+  }, 2000);
+}
+
+async function selectDevice(deviceId) {
+  const res = await fetch(`/api/devices/${deviceId}/select`, { method: 'POST' });
+  if (!res.ok) { showToast('Gagal tukar peranti', 'error'); return; }
+  await loadDevices();
+  loadAll();
+  showToast('Peranti ditukar');
+}
+
+async function reconnectDevice(deviceId) {
+  await fetch(`/api/devices/${deviceId}/connect`, { method: 'POST' });
+  showToast('Cuba sambung semula...');
+  setTimeout(loadDevices, 3000);
+}
+
+async function deleteDevice(deviceId, name) {
+  if (!confirm(`Buang peranti "${name}"? Semua data contacts dan jadual untuk peranti ini akan dipadam.`)) return;
+  const res = await fetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (!res.ok) { showToast(data.error, 'error'); return; }
+  await loadDevices();
+  if (data.newDeviceId) loadAll();
+  showToast(`Peranti "${name}" dibuang`, 'error');
+}
+
 // ── Init ───────────────────────────────────────────────
 function loadAll() {
   checkStatus();
@@ -942,12 +1065,17 @@ function loadAll() {
   loadSchedules();
   loadLogs();
   loadQueue();
+  loadDevices();
 }
 
 async function init() {
   const authed = await checkAuth();
-  if (authed) loadAll();
+  if (authed) {
+    await loadDevices();
+    loadAll();
+  }
   setInterval(checkStatus, 3000);
+  setInterval(loadDevices, 5000);
   setInterval(loadLogs, 10000);
   setInterval(loadQueue, 30000);
   setInterval(loadSchedules, 20000);

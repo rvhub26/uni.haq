@@ -59,17 +59,21 @@
     </a>
   </nav>
 
+  <!-- Device Selector -->
+  <div style="padding:0 14px 12px;">
+    <div style="font-size:0.72rem;color:#475569;font-weight:600;letter-spacing:0.05em;margin-bottom:6px;">PERANTI AKTIF</div>
+    <button onclick="showDeviceMgmt()" id="device-selector-btn" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;">
+      <span id="device-status-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
+      <span id="device-selector-name" style="font-size:0.8rem;color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Tiada peranti</span>
+      <span style="color:#475569;font-size:0.7rem;">▼</span>
+    </button>
+  </div>
+
   <div class="sidebar-footer">
-    <div class="status-pill">
-      <span id="nav-status-dot" class="status-dot disconnected"></span>
-      <span id="nav-status-text">Tidak Bersambung</span>
-    </div>
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;">
-      <div style="font-size:0.78rem;color:#64748b;margin-bottom:6px;">Log masuk sebagai: <span id="sidebar-username" style="color:#94a3b8;font-weight:600;">—</span></div>
-      <div style="display:flex;gap:6px;">
-        <button onclick="showUserMgmt()" id="btn-user-mgmt" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;display:none;">👥 Pengguna</button>
-        <button onclick="doLogout()" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:6px;cursor:pointer;">Log Keluar</button>
-      </div>
+    <div style="font-size:0.78rem;color:#64748b;margin-bottom:6px;">Log masuk sebagai: <span id="sidebar-username" style="color:#94a3b8;font-weight:600;">—</span></div>
+    <div style="display:flex;gap:6px;">
+      <button onclick="showUserMgmt()" id="btn-user-mgmt" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;display:none;">👥 Pengguna</button>
+      <button onclick="doLogout()" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:6px;cursor:pointer;">Log Keluar</button>
     </div>
   </div>
 </aside>
@@ -98,6 +102,28 @@
     </div>
     <div id="login-error" style="color:#ef4444;font-size:0.82rem;margin-bottom:12px;display:none;"></div>
     <button onclick="doLogin()" class="btn-primary" style="width:100%;padding:12px;font-size:1rem;">Log Masuk</button>
+  </div>
+</div>
+
+<!-- ── Device Manager Modal ── -->
+<div id="device-mgmt-modal" style="display:none;position:fixed;inset:0;background:#00000090;z-index:9997;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="color:#f1f5f9;">📱 Urus Peranti WhatsApp</h2>
+      <button onclick="closeDeviceMgmt()" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+
+    <!-- Add device form -->
+    <div style="background:#0f172a;border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:10px;font-weight:600;">TAMBAH NOMBOR BARU (max 10)</div>
+      <div style="display:flex;gap:10px;">
+        <input type="text" id="new-device-name" class="input-field" placeholder="Nama peranti cth: Nombor Utama, Nombor Sales..." style="flex:1;" />
+        <button onclick="addDevice()" class="btn-primary" style="white-space:nowrap;">+ Tambah</button>
+      </div>
+    </div>
+
+    <!-- Device list -->
+    <div id="devices-list-mgmt"><p class="empty-pick">Tiada peranti lagi. Tambah nombor WhatsApp untuk mula.</p></div>
   </div>
 </div>
 

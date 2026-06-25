@@ -1,8 +1,16 @@
 const router = require('express').Router();
-const { readJSON, writeJSON } = require('../store');
+const { readDeviceJSON, writeDeviceJSON } = require('../store');
 const { scheduleJob, cancelJob, runBlast } = require('../scheduler');
 
-router.post('/', (req, res) => {
+function requireDevice(req, res, next) {
+  if (!req.session.deviceId) return res.status(400).json({ error: 'Pilih peranti WhatsApp dahulu' });
+  next();
+}
+
+function ctx(req) { return { userId: req.session.userId, deviceId: req.session.deviceId }; }
+
+router.post('/', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
   const { template, mediaFile, type, datetime, pattern, contacts, useRotation, templateIds, contactGapMs, templateGapMs } = req.body;
 
   if (!type || !['one-time', 'recurring'].includes(type)) return res.status(400).json({ error: 'Jenis jadual tidak sah' });
@@ -12,11 +20,13 @@ router.post('/', (req, res) => {
   if (useRotation) {
     if (!templateIds?.length) return res.status(400).json({ error: 'Pilih sekurang-kurangnya satu template untuk rotation' });
   } else {
-    if (!template || !template.trim()) return res.status(400).json({ error: 'Template mesej diperlukan' });
+    if (!template?.trim()) return res.status(400).json({ error: 'Template mesej diperlukan' });
   }
 
   const schedule = {
     id: `sch_${Date.now()}`,
+    userId,
+    deviceId,
     useRotation: !!useRotation,
     templateIds: useRotation ? templateIds : null,
     rotationIndex: 0,
@@ -32,42 +42,59 @@ router.post('/', (req, res) => {
     createdAt: new Date().toISOString(),
   };
 
-  const list = readJSON('schedules.json');
+  const list = readDeviceJSON(userId, deviceId, 'schedules.json');
   list.push(schedule);
-  writeJSON('schedules.json', list);
-  scheduleJob(schedule);
+  writeDeviceJSON(userId, deviceId, 'schedules.json', list);
+  scheduleJob(schedule, userId, deviceId);
   res.json(schedule);
 });
 
-router.get('/', (_req, res) => res.json(readJSON('schedules.json')));
+router.get('/', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  res.json(readDeviceJSON(userId, deviceId, 'schedules.json'));
+});
 
-router.delete('/:id', (req, res) => {
-  const list = readJSON('schedules.json');
+router.delete('/:id', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const list = readDeviceJSON(userId, deviceId, 'schedules.json');
   const filtered = list.filter(s => s.id !== req.params.id);
   if (filtered.length === list.length) return res.status(404).json({ error: 'Jadual tidak dijumpai' });
-  writeJSON('schedules.json', filtered);
+  writeDeviceJSON(userId, deviceId, 'schedules.json', filtered);
   cancelJob(req.params.id);
   res.json({ ok: true });
 });
 
-router.get('/logs', (_req, res) => res.json(readJSON('logs.json')));
-router.delete('/logs', (_req, res) => { writeJSON('logs.json', []); res.json({ ok: true }); });
-router.get('/queue', (_req, res) => {
-  const { getQueueStatus } = require('../queue');
-  res.json(getQueueStatus());
+router.get('/logs', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  res.json(readDeviceJSON(userId, deviceId, 'logs.json'));
 });
-router.delete('/:id/queue', (req, res) => {
-  const { cancelQueueForSchedule } = require('../queue');
-  cancelQueueForSchedule(req.params.id);
+
+router.delete('/logs', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  writeDeviceJSON(userId, deviceId, 'logs.json', []);
   res.json({ ok: true });
 });
 
-router.post('/:id/blast-now', async (req, res) => {
-  const schedule = readJSON('schedules.json').find(s => s.id === req.params.id);
+router.get('/queue', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const { getQueueStatus } = require('../queue');
+  res.json(getQueueStatus(userId, deviceId));
+});
+
+router.delete('/:id/queue', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const { cancelQueueForSchedule } = require('../queue');
+  cancelQueueForSchedule(userId, deviceId, req.params.id);
+  res.json({ ok: true });
+});
+
+router.post('/:id/blast-now', requireDevice, async (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const schedule = readDeviceJSON(userId, deviceId, 'schedules.json').find(s => s.id === req.params.id);
   if (!schedule) return res.status(404).json({ error: 'Jadual tidak dijumpai' });
-  cancelJob(req.params.id); // cancel pending timeout supaya tak double-blast
+  cancelJob(req.params.id);
   try {
-    res.json(await runBlast(schedule));
+    res.json(await runBlast(schedule, userId, deviceId));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

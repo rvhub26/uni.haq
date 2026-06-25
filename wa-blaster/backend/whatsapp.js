@@ -1,18 +1,25 @@
 const path = require('path');
+const fs = require('fs');
 const qrcode = require('qrcode');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { AUTH_DIR } = require('./config');
-const { readJSON, readJSONObject, writeJSON } = require('./store');
+const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('./store');
 
-let sock = null;
-let status = 'disconnected';
-let qrBase64 = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_DELAY = 30000; // max 30 saat delay
+// Map of active connections: `${userId}::${deviceId}` → state object
+const conns = new Map();
+
+function connKey(userId, deviceId) { return `${userId}::${deviceId}`; }
+
+function getConn(userId, deviceId) {
+  const k = connKey(userId, deviceId);
+  if (!conns.has(k)) {
+    conns.set(k, { sock: null, status: 'disconnected', qrBase64: null, reconnectAttempts: 0 });
+  }
+  return conns.get(k);
+}
 
 function toJID(phone) {
-  const clean = String(phone).replace(/\D/g, '');
-  return `${clean}@s.whatsapp.net`;
+  return `${String(phone).replace(/\D/g, '')}@s.whatsapp.net`;
 }
 
 function getMediaType(filePath) {
@@ -22,50 +29,48 @@ function getMediaType(filePath) {
   return null;
 }
 
-async function connectWhatsApp() {
-  // Tutup socket lama sebelum buat baru
-  if (sock) {
-    try { sock.end(undefined); } catch {}
-    sock = null;
+async function connectDevice(userId, deviceId) {
+  const conn = getConn(userId, deviceId);
+
+  if (conn.sock) {
+    try { conn.sock.end(undefined); } catch {}
+    conn.sock = null;
   }
 
-  const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, AUTH_DIR));
+  const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
+  if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
+
+  const { state, saveCreds } = await useMultiFileAuthState(authDir);
   const { version } = await fetchLatestBaileysVersion();
 
-  sock = makeWASocket({
+  const sock = makeWASocket({
     version,
     auth: state,
     printQRInTerminal: false,
-    keepAliveIntervalMs: 15000,     // ping setiap 15 saat supaya tak putus
+    keepAliveIntervalMs: 15000,
     connectTimeoutMs: 60000,
     retryRequestDelayMs: 2000,
     defaultQueryTimeoutMs: 60000,
     generateHighQualityLinkPreview: false,
   });
 
+  conn.sock = sock;
+
   sock.ev.on('creds.update', saveCreds);
 
-  // Track replies dari contacts
   sock.ev.on('messages.upsert', ({ messages }) => {
     for (const msg of messages) {
-      if (msg.key.fromMe) continue;
-      if (!msg.message) continue;
+      if (msg.key.fromMe || !msg.message) continue;
       const jid = msg.key.remoteJid;
-      if (!jid || !jid.endsWith('@s.whatsapp.net')) continue;
-
+      if (!jid?.endsWith('@s.whatsapp.net')) continue;
       const telefon = jid.replace('@s.whatsapp.net', '');
-      const contacts = readJSON('contacts.json');
+      const contacts = readDeviceJSON(userId, deviceId, 'contacts.json');
       const contact = contacts.find(c => c.telefon === telefon);
       if (!contact) continue;
-
-      const replies = readJSONObject('replies.json');
+      const replies = readDeviceJSONObject(userId, deviceId, 'replies.json');
       if (!replies[telefon]) {
-        replies[telefon] = {
-          nama: contact.nama,
-          replied: true,
-          repliedAt: new Date().toISOString(),
-        };
-        writeJSON('replies.json', replies);
+        replies[telefon] = { nama: contact.nama, replied: true, repliedAt: new Date().toISOString() };
+        writeDeviceJSON(userId, deviceId, 'replies.json', replies);
       }
     }
   });
@@ -74,65 +79,81 @@ async function connectWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      status = 'qr';
-      qrBase64 = await qrcode.toDataURL(qr);
-      reconnectAttempts = 0;
+      conn.status = 'qr';
+      conn.qrBase64 = await qrcode.toDataURL(qr);
+      conn.reconnectAttempts = 0;
     }
 
     if (connection === 'open') {
-      status = 'connected';
-      qrBase64 = null;
-      reconnectAttempts = 0;
-      console.log('WhatsApp berjaya disambung');
+      conn.status = 'connected';
+      conn.qrBase64 = null;
+      conn.reconnectAttempts = 0;
+      console.log(`[WA] ${userId}::${deviceId} berjaya disambung`);
     }
 
     if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
-      qrBase64 = null;
+      const code = lastDisconnect?.error?.output?.statusCode;
+      conn.qrBase64 = null;
 
-      if (statusCode === DisconnectReason.loggedOut) {
-        // Kena logout — perlu scan QR baru
-        status = 'disconnected';
-        console.log('Dilog keluar. Scan QR semula.');
+      if (code === DisconnectReason.loggedOut) {
+        conn.status = 'disconnected';
+        console.log(`[WA] ${userId}::${deviceId} dilog keluar`);
         return;
       }
 
-      // Semua disconnect lain — reconnect dengan exponential backoff
-      reconnectAttempts++;
-      const delay = Math.min(3000 * reconnectAttempts, MAX_RECONNECT_DELAY);
-      status = 'connecting';
-      console.log(`Putus sambungan (${statusCode}), cuba semula dalam ${delay / 1000}s... (percubaan #${reconnectAttempts})`);
-      setTimeout(connectWhatsApp, delay);
+      conn.reconnectAttempts++;
+      const delay = Math.min(3000 * conn.reconnectAttempts, 30000);
+      conn.status = 'connecting';
+      console.log(`[WA] ${userId}::${deviceId} reconnect dalam ${delay / 1000}s...`);
+      setTimeout(() => connectDevice(userId, deviceId), delay);
     }
   });
 }
 
-function getStatus() {
-  return { connected: status === 'connected', status };
+async function disconnectDevice(userId, deviceId) {
+  const k = connKey(userId, deviceId);
+  const conn = conns.get(k);
+  if (conn?.sock) {
+    try { conn.sock.end(undefined); } catch {}
+  }
+  conns.delete(k);
+  const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
+  if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
 }
 
-function getQR() {
-  return qrBase64;
+function getDeviceStatus(userId, deviceId) {
+  const conn = getConn(userId, deviceId);
+  return { connected: conn.status === 'connected', status: conn.status };
 }
 
-async function sendMessage(phone, text) {
-  if (!sock || status !== 'connected') throw new Error('WhatsApp belum disambung');
-  const jid = toJID(phone);
-  await sock.sendMessage(jid, { text });
+function getDeviceQR(userId, deviceId) {
+  return getConn(userId, deviceId).qrBase64;
 }
 
-async function sendMedia(phone, filePath, caption) {
-  if (!sock || status !== 'connected') throw new Error('WhatsApp belum disambung');
-  const jid = toJID(phone);
+async function sendMessageDevice(userId, deviceId, phone, text) {
+  const conn = getConn(userId, deviceId);
+  if (!conn.sock || conn.status !== 'connected') throw new Error('WhatsApp belum disambung');
+  await conn.sock.sendMessage(toJID(phone), { text });
+}
+
+async function sendMediaDevice(userId, deviceId, phone, filePath, caption) {
+  const conn = getConn(userId, deviceId);
+  if (!conn.sock || conn.status !== 'connected') throw new Error('WhatsApp belum disambung');
   const type = getMediaType(filePath);
-
   if (type === 'image') {
-    await sock.sendMessage(jid, { image: { url: filePath }, caption });
+    await conn.sock.sendMessage(toJID(phone), { image: { url: filePath }, caption });
   } else if (type === 'video') {
-    await sock.sendMessage(jid, { video: { url: filePath }, caption });
+    await conn.sock.sendMessage(toJID(phone), { video: { url: filePath }, caption });
   } else {
     throw new Error('Jenis fail tidak disokong');
   }
 }
 
-module.exports = { connectWhatsApp, getStatus, getQR, sendMessage, sendMedia };
+module.exports = {
+  connectDevice,
+  disconnectDevice,
+  getDeviceStatus,
+  getDeviceQR,
+  sendMessageDevice,
+  sendMediaDevice,
+};

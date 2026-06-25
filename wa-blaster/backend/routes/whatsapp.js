@@ -1,15 +1,17 @@
 const router = require('express').Router();
-const { getStatus, getQR } = require('../whatsapp');
+const { getDeviceStatus, getDeviceQR } = require('../whatsapp');
 
-// Status sambungan WhatsApp
-router.get('/status', (_req, res) => {
-  res.json(getStatus());
+// Status + QR untuk device aktif user
+router.get('/status', (req, res) => {
+  const { userId, deviceId } = req.session;
+  if (!deviceId) return res.json({ connected: false, status: 'no_device' });
+  res.json(getDeviceStatus(userId, deviceId));
 });
 
-// QR code dalam base64 — null kalau dah connected
-router.get('/qr', (_req, res) => {
-  const qr = getQR();
-  res.json({ qr });
+router.get('/qr', (req, res) => {
+  const { userId, deviceId } = req.session;
+  if (!deviceId) return res.json({ qr: null });
+  res.json({ qr: getDeviceQR(userId, deviceId) });
 });
 
 module.exports = router;

@@ -1,9 +1,13 @@
 const router = require('express').Router();
 const multer = require('multer');
 const XLSX = require('xlsx');
-const { readJSON, readJSONObject, writeJSON } = require('../store');
+const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('../store');
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+function ctx(req) {
+  return { userId: req.session.userId, deviceId: req.session.deviceId };
+}
 
 function formatPhone(raw) {
   let num = String(raw).replace(/\D/g, '');
@@ -12,10 +16,15 @@ function formatPhone(raw) {
   return num;
 }
 
-// Upload Excel dengan nama kumpulan
-router.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Tiada fail dihantar' });
+function requireDevice(req, res, next) {
+  if (!req.session.deviceId) return res.status(400).json({ error: 'Pilih peranti WhatsApp dahulu' });
+  next();
+}
 
+// Upload Excel
+router.post('/upload', requireDevice, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Tiada fail dihantar' });
+  const { userId, deviceId } = ctx(req);
   const kumpulan = (req.body.kumpulan || '').trim() || 'Umum';
 
   let rows;
@@ -27,7 +36,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
     return res.status(400).json({ error: 'Fail Excel tidak sah' });
   }
 
-  const existing = readJSON('contacts.json');
+  const existing = readDeviceJSON(userId, deviceId, 'contacts.json');
   const added = [];
   const failed = [];
 
@@ -41,64 +50,58 @@ router.post('/upload', upload.single('file'), (req, res) => {
       return;
     }
 
-    added.push({
-      id: `${Date.now()}_${i}`,
-      nama,
-      telefon,
-      kumpulan,
-    });
+    added.push({ id: `${Date.now()}_${i}`, nama, telefon, kumpulan });
   });
 
   const merged = [...existing, ...added];
-  writeJSON('contacts.json', merged);
+  writeDeviceJSON(userId, deviceId, 'contacts.json', merged);
 
-  res.json({
-    berjaya: added.length,
-    gagal: failed.length,
-    gagal_senarai: failed,
-    contacts: merged,
-    kumpulan,
-  });
+  res.json({ berjaya: added.length, gagal: failed.length, gagal_senarai: failed, contacts: merged, kumpulan });
 });
 
 // Semua contacts
-router.get('/', (_req, res) => {
-  res.json(readJSON('contacts.json'));
+router.get('/', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  res.json(readDeviceJSON(userId, deviceId, 'contacts.json'));
 });
 
 // Buang satu contact
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
   if (req.params.id === 'all') {
-    writeJSON('contacts.json', []);
+    writeDeviceJSON(userId, deviceId, 'contacts.json', []);
     return res.json({ ok: true });
   }
-  const list = readJSON('contacts.json');
+  const list = readDeviceJSON(userId, deviceId, 'contacts.json');
   const filtered = list.filter(c => c.id !== req.params.id);
   if (filtered.length === list.length) return res.status(404).json({ error: 'Tidak dijumpai' });
-  writeJSON('contacts.json', filtered);
+  writeDeviceJSON(userId, deviceId, 'contacts.json', filtered);
   res.json({ ok: true });
 });
 
-// Buang semua contacts dalam satu kumpulan
-router.delete('/group/:name', (req, res) => {
+// Buang semua contacts dalam kumpulan
+router.delete('/group/:name', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
   const name = decodeURIComponent(req.params.name);
-  const list = readJSON('contacts.json');
+  const list = readDeviceJSON(userId, deviceId, 'contacts.json');
   const filtered = list.filter(c => (c.kumpulan || 'Umum') !== name);
-  writeJSON('contacts.json', filtered);
+  writeDeviceJSON(userId, deviceId, 'contacts.json', filtered);
   res.json({ ok: true, buang: list.length - filtered.length });
 });
 
 // Kosongkan semua
-router.delete('/', (_req, res) => {
-  writeJSON('contacts.json', []);
+router.delete('/', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  writeDeviceJSON(userId, deviceId, 'contacts.json', []);
   res.json({ ok: true });
 });
 
-// Lihat sent history (berapa template dah hantar per nombor)
-router.get('/history', (_req, res) => {
-  const history = readJSONObject('sent_history.json');
-  const contacts = readJSON('contacts.json');
-  const templates = readJSON('templates.json');
+// Sent history
+router.get('/history', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const history = readDeviceJSONObject(userId, deviceId, 'sent_history.json');
+  const contacts = readDeviceJSON(userId, deviceId, 'contacts.json');
+  const templates = require('./templates').getTemplates ? require('./templates').getTemplates(userId) : [];
 
   const result = Object.entries(history).map(([telefon, tmplIds]) => {
     const contact = contacts.find(c => c.telefon === telefon);
@@ -107,35 +110,28 @@ router.get('/history', (_req, res) => {
       nama: contact?.nama || '—',
       kumpulan: contact?.kumpulan || '—',
       templatesDihantar: tmplIds.length,
-      templates: tmplIds.map(id => {
-        const t = templates.find(t => t.id === id);
-        return { id, name: t?.name || '(template dipadam)' };
-      }),
+      templates: tmplIds.map(id => ({ id, name: templates.find(t => t.id === id)?.name || '(dipadam)' })),
     };
   });
 
   res.json(result);
 });
 
-// Reset sent history untuk satu kumpulan
-router.delete('/history/group/:name', (req, res) => {
+// Reset sent history untuk kumpulan
+router.delete('/history/group/:name', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
   const kumpulan = decodeURIComponent(req.params.name);
-  const contacts = readJSON('contacts.json');
-  const history = readJSONObject('sent_history.json');
-
-  const phonesInGroup = contacts
-    .filter(c => (c.kumpulan || 'Umum') === kumpulan)
-    .map(c => c.telefon);
-
-  phonesInGroup.forEach(phone => { delete history[phone]; });
-  writeJSON('sent_history.json', history);
-
-  res.json({ ok: true, reset: phonesInGroup.length });
+  const contacts = readDeviceJSON(userId, deviceId, 'contacts.json');
+  const history = readDeviceJSONObject(userId, deviceId, 'sent_history.json');
+  contacts.filter(c => (c.kumpulan || 'Umum') === kumpulan).forEach(c => { delete history[c.telefon]; });
+  writeDeviceJSON(userId, deviceId, 'sent_history.json', history);
+  res.json({ ok: true });
 });
 
-// Reset sent history untuk semua
-router.delete('/history', (_req, res) => {
-  writeJSON('sent_history.json', {});
+// Reset semua history
+router.delete('/history', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  writeDeviceJSON(userId, deviceId, 'sent_history.json', {});
   res.json({ ok: true });
 });
 
