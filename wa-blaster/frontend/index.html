@@ -65,22 +65,10 @@
     </a>
   </nav>
 
-  <!-- Device Selector -->
-  <div style="padding:0 14px 12px;">
-    <div style="font-size:0.72rem;color:#475569;font-weight:600;letter-spacing:0.05em;margin-bottom:6px;">PERANTI AKTIF</div>
-    <a href="#" id="device-selector-btn" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none;">
-      <span id="device-status-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
-      <span id="device-selector-name" style="font-size:0.8rem;color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Tiada peranti</span>
-      <span style="color:#475569;font-size:0.7rem;">▼</span>
-    </a>
-    <script>
-    document.getElementById('device-selector-btn').addEventListener('click', function(e) {
-      e.preventDefault();
-      document.getElementById('device-mgmt-modal').style.display = 'flex';
-      if (typeof loadDevices === 'function') loadDevices();
-    });
-    </script>
-  </div>
+  <!-- Status peranti ringkas (hidden elements — dikekalkan untuk JS compatibility) -->
+  <span id="device-status-dot" style="display:none;"></span>
+  <span id="device-selector-name" style="display:none;"></span>
+  <span id="device-selector-btn" style="display:none;"></span>
   </div><!-- end sidebar-scroll -->
 
   <div class="sidebar-footer">
