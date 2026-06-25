@@ -433,19 +433,22 @@
               </label>
               <p class="field-hint" style="margin-bottom:10px;">Sesuai untuk nombor berisiko — blast dalam kumpulan kecil dengan rehat antara setiap kumpulan.</p>
 
-              <!-- Pilihan Ya / Tidak -->
+              <!-- Checkbox tersembunyi sebagai state -->
+              <input type="checkbox" id="batch-toggle-cb" style="position:absolute;opacity:0;pointer-events:none;" onchange="onBatchToggle(this.checked)">
+
+              <!-- Pilihan Ya / Tidak — label for checkbox -->
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-                <button type="button" id="batch-no-btn" style="cursor:pointer;border:2px solid #22c55e;background:#22c55e15;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:8px;text-align:left;width:100%;">
+                <label for="batch-toggle-cb" id="batch-no-lbl" style="cursor:pointer;border:2px solid #22c55e;background:#22c55e15;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:8px;" onclick="if(document.getElementById('batch-toggle-cb').checked){document.getElementById('batch-toggle-cb').checked=false;onBatchToggle(false);}">
                   <span id="batch-no-dot" style="width:14px;height:14px;border-radius:50%;border:2px solid #22c55e;background:#22c55e;display:inline-block;flex-shrink:0;"></span>
                   <span style="color:#f1f5f9;font-size:0.88rem;font-weight:600;">Tidak Perlu</span>
-                </button>
-                <button type="button" id="batch-yes-btn" style="cursor:pointer;border:2px solid #334155;background:#0f172a;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:8px;text-align:left;width:100%;">
+                </label>
+                <label for="batch-toggle-cb" id="batch-yes-lbl" style="cursor:pointer;border:2px solid #334155;background:#0f172a;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:8px;">
                   <span id="batch-yes-dot" style="width:14px;height:14px;border-radius:50%;border:2px solid #475569;background:transparent;display:inline-block;flex-shrink:0;"></span>
                   <span style="color:#64748b;font-size:0.88rem;font-weight:600;">Ya, Hadkan Per Batch</span>
-                </button>
+                </label>
               </div>
 
-              <!-- Settings (tersembunyi by default) -->
+              <!-- Settings -->
               <div id="batch-settings" style="display:none;background:#0f172a;border:1px solid #22c55e30;border-radius:10px;padding:16px;">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px;">
                   <div>
@@ -469,6 +472,25 @@
                 <div id="batch-preview" style="padding:10px 12px;background:#1e293b;border-radius:8px;font-size:0.83rem;color:#94a3b8;"></div>
               </div>
             </div>
+
+            <script>
+            function onBatchToggle(enabled) {
+              document.getElementById('batch-settings').style.display = enabled ? 'block' : 'none';
+              var nd = document.getElementById('batch-no-dot');
+              var yd = document.getElementById('batch-yes-dot');
+              var nl = document.getElementById('batch-no-lbl');
+              var yl = document.getElementById('batch-yes-lbl');
+              nl.style.border = enabled ? '2px solid #334155' : '2px solid #22c55e';
+              nl.style.background = enabled ? '#0f172a' : '#22c55e15';
+              nd.style.background = enabled ? 'transparent' : '#22c55e';
+              nd.style.borderColor = enabled ? '#475569' : '#22c55e';
+              yl.style.border = enabled ? '2px solid #22c55e' : '2px solid #334155';
+              yl.style.background = enabled ? '#22c55e15' : '#0f172a';
+              yd.style.background = enabled ? '#22c55e' : 'transparent';
+              yd.style.borderColor = enabled ? '#22c55e' : '#475569';
+              if (enabled && typeof updateBatchPreview === 'function') updateBatchPreview();
+            }
+            </script>
 
             <button class="btn-primary" id="btn-save-schedule" style="width:100%;justify-content:center;padding:11px;">
               💾 Simpan Jadual

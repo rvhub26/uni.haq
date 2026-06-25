@@ -626,32 +626,10 @@ document.getElementById('tmpl-gap-value').addEventListener('input', updateTmplGa
 document.getElementById('tmpl-gap-unit').addEventListener('change', updateTmplGapPreview);
 updateTmplGapPreview();
 
-// Batch mode state
-let _batchEnabled = false;
-
-function setBatchMode(enabled) {
-  _batchEnabled = enabled;
-
-  const settings = document.getElementById('batch-settings');
-  const noBtn = document.getElementById('batch-no-btn');
-  const yesBtn = document.getElementById('batch-yes-btn');
-  const noDot = document.getElementById('batch-no-dot');
-  const yesDot = document.getElementById('batch-yes-dot');
-  if (!settings || !noBtn || !yesBtn) return;
-
-  settings.style.display = enabled ? 'block' : 'none';
-
-  noBtn.style.border = enabled ? '2px solid #334155' : '2px solid #22c55e';
-  noBtn.style.background = enabled ? '#0f172a' : '#22c55e15';
-  if (noDot) { noDot.style.background = enabled ? 'transparent' : '#22c55e'; noDot.style.borderColor = enabled ? '#475569' : '#22c55e'; }
-  noBtn.querySelector('span:last-child').style.color = enabled ? '#64748b' : '#f1f5f9';
-
-  yesBtn.style.border = enabled ? '2px solid #22c55e' : '2px solid #334155';
-  yesBtn.style.background = enabled ? '#22c55e15' : '#0f172a';
-  if (yesDot) { yesDot.style.background = enabled ? '#22c55e' : 'transparent'; yesDot.style.borderColor = enabled ? '#22c55e' : '#475569'; }
-  yesBtn.querySelector('span:last-child').style.color = enabled ? '#f1f5f9' : '#64748b';
-
-  if (enabled) updateBatchPreview();
+// Batch mode — baca state dari checkbox (HTML-defined, zero JS dependency)
+function isBatchEnabled() {
+  const cb = document.getElementById('batch-toggle-cb');
+  return cb ? cb.checked : false;
 }
 
 function updateBatchPreview() {
@@ -703,7 +681,7 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
   const templateGapMs = Number(document.getElementById('tmpl-gap-value').value) * Number(document.getElementById('tmpl-gap-unit').value);
 
   // Batch blast settings
-  const batchEnabled = _batchEnabled;
+  const batchEnabled = isBatchEnabled();
   const batchSize = batchEnabled ? parseInt(document.getElementById('batch-size').value) || 50 : 0;
   const batchGapMs = batchEnabled
     ? Number(document.getElementById('batch-gap-value').value) * Number(document.getElementById('batch-gap-unit').value)
@@ -734,7 +712,8 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
     const data = await res.json();
     if (!res.ok) { showToast(data.error, 'error'); return; }
     showToast('Jadual berjaya disimpan!');
-    setBatchMode(false);
+    const cb = document.getElementById('batch-toggle-cb');
+    if (cb) { cb.checked = false; onBatchToggle(false); }
     loadSchedules();
   } catch { showToast('Ralat simpan jadual', 'error'); }
 });
@@ -1142,12 +1121,6 @@ function loadAll() {
 }
 
 async function init() {
-  // Wire batch mode buttons via addEventListener (more reliable than onclick attr)
-  const batchNoBtn = document.getElementById('batch-no-btn');
-  const batchYesBtn = document.getElementById('batch-yes-btn');
-  if (batchNoBtn) batchNoBtn.addEventListener('click', () => setBatchMode(false));
-  if (batchYesBtn) batchYesBtn.addEventListener('click', () => setBatchMode(true));
-
   const authed = await checkAuth();
   if (authed) {
     await loadDevices();
