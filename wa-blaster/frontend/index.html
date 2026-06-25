@@ -62,7 +62,7 @@
   <!-- Device Selector -->
   <div style="padding:0 14px 12px;">
     <div style="font-size:0.72rem;color:#475569;font-weight:600;letter-spacing:0.05em;margin-bottom:6px;">PERANTI AKTIF</div>
-    <button onclick="showDeviceMgmt()" id="device-selector-btn" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;">
+    <button id="device-selector-btn" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;">
       <span id="device-status-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
       <span id="device-selector-name" style="font-size:0.8rem;color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Tiada peranti</span>
       <span style="color:#475569;font-size:0.7rem;">▼</span>
@@ -72,14 +72,14 @@
   <div class="sidebar-footer">
     <div style="font-size:0.78rem;color:#64748b;margin-bottom:6px;">Log masuk sebagai: <span id="sidebar-username" style="color:#94a3b8;font-weight:600;">—</span></div>
     <div style="display:flex;gap:6px;">
-      <button onclick="showUserMgmt()" id="btn-user-mgmt" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;display:none;">👥 Pengguna</button>
-      <button onclick="doLogout()" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:6px;cursor:pointer;">Log Keluar</button>
+      <button id="btn-user-mgmt" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;display:none;">👥 Pengguna</button>
+      <button id="btn-logout" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:6px;cursor:pointer;">Log Keluar</button>
     </div>
   </div>
 </aside>
 
 <!-- ── Login Overlay ── -->
-<div id="login-overlay" style="display:none;position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;align-items:center;justify-content:center;">
+<div id="login-overlay" style="position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;align-items:center;justify-content:center;">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:40px;width:100%;max-width:380px;box-shadow:0 25px 50px #00000080;">
     <div style="text-align:center;margin-bottom:28px;">
       <svg viewBox="0 0 40 40" fill="none" style="width:48px;height:48px;margin:0 auto 12px;">
@@ -94,14 +94,14 @@
     </div>
     <div style="margin-bottom:14px;">
       <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Username</label>
-      <input id="login-username" type="text" class="input-field" placeholder="Masukkan username..." autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()" />
+      <input id="login-username" type="text" class="input-field" placeholder="Masukkan username..." autocomplete="username" />
     </div>
     <div style="margin-bottom:20px;">
       <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Password</label>
-      <input id="login-password" type="password" class="input-field" placeholder="Masukkan password..." autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+      <input id="login-password" type="password" class="input-field" placeholder="Masukkan password..." autocomplete="current-password" />
     </div>
     <div id="login-error" style="color:#ef4444;font-size:0.82rem;margin-bottom:12px;display:none;"></div>
-    <button onclick="doLogin()" class="btn-primary" style="width:100%;padding:12px;font-size:1rem;">Log Masuk</button>
+    <button id="btn-login" class="btn-primary" style="width:100%;padding:12px;font-size:1rem;">Log Masuk</button>
   </div>
 </div>
 
@@ -110,7 +110,7 @@
   <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h2 style="color:#f1f5f9;">📱 Urus Peranti WhatsApp</h2>
-      <button onclick="closeDeviceMgmt()" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;">✕</button>
+      <button id="btn-close-device-mgmt" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;">✕</button>
     </div>
 
     <!-- Add device form -->
@@ -118,7 +118,7 @@
       <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:10px;font-weight:600;">TAMBAH NOMBOR BARU (max 10)</div>
       <div style="display:flex;gap:10px;">
         <input type="text" id="new-device-name" class="input-field" placeholder="Nama peranti cth: Nombor Utama, Nombor Sales..." style="flex:1;" />
-        <button onclick="addDevice()" class="btn-primary" style="white-space:nowrap;">+ Tambah</button>
+        <button id="btn-add-device" class="btn-primary" style="white-space:nowrap;">+ Tambah</button>
       </div>
     </div>
 
@@ -132,7 +132,7 @@
   <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h2 style="color:#f1f5f9;">👥 Urus Pengguna</h2>
-      <button onclick="closeUserMgmt()" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;">✕</button>
+      <button id="btn-close-user-mgmt" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;">✕</button>
     </div>
     <!-- Form tambah user -->
     <div style="background:#0f172a;border-radius:10px;padding:16px;margin-bottom:16px;">
@@ -146,7 +146,7 @@
           <option value="user">User biasa</option>
           <option value="admin">Admin</option>
         </select>
-        <button onclick="addUser()" class="btn-primary" style="white-space:nowrap;">+ Tambah</button>
+        <button id="btn-add-user" class="btn-primary" style="white-space:nowrap;">+ Tambah</button>
       </div>
     </div>
     <div id="users-list-mgmt"><p class="empty-pick">Tiada pengguna</p></div>
@@ -547,7 +547,7 @@
         <h1>📊 Laporan</h1>
         <div class="page-header-sub">Prestasi blast dan rekod close sales</div>
       </div>
-      <button onclick="loadLaporan()" class="btn-secondary" style="white-space:nowrap;">↺ Refresh</button>
+      <button id="btn-refresh-laporan" class="btn-secondary" style="white-space:nowrap;">↺ Refresh</button>
     </div>
     <div class="page-content">
 
@@ -623,7 +623,7 @@
             <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:4px;">Nota</label>
             <input type="text" id="sales-notes" class="input-field" placeholder="Produk, pakej... (optional)" />
           </div>
-          <button onclick="addSale()" class="btn-primary" style="white-space:nowrap;height:42px;">💰 Rekod</button>
+          <button id="btn-add-sale" class="btn-primary" style="white-space:nowrap;height:42px;">💰 Rekod</button>
         </div>
 
         <!-- Jumlah total -->

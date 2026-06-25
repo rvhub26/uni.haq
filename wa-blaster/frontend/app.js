@@ -1134,3 +1134,28 @@ async function init() {
 }
 
 init();
+
+// ── Wire semua static buttons (top-level addEventListener = paling reliable) ──
+(function wireButtons() {
+  // Sidebar
+  document.getElementById('device-selector-btn')?.addEventListener('click', showDeviceMgmt);
+  document.getElementById('btn-user-mgmt')?.addEventListener('click', showUserMgmt);
+  document.getElementById('btn-logout')?.addEventListener('click', doLogout);
+
+  // Login
+  document.getElementById('btn-login')?.addEventListener('click', doLogin);
+  document.getElementById('login-username')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById('login-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  // Device modal
+  document.getElementById('btn-close-device-mgmt')?.addEventListener('click', closeDeviceMgmt);
+  document.getElementById('btn-add-device')?.addEventListener('click', addDevice);
+
+  // User modal
+  document.getElementById('btn-close-user-mgmt')?.addEventListener('click', closeUserMgmt);
+  document.getElementById('btn-add-user')?.addEventListener('click', addUser);
+
+  // Laporan
+  document.getElementById('btn-refresh-laporan')?.addEventListener('click', loadLaporan);
+  document.getElementById('btn-add-sale')?.addEventListener('click', addSale);
+})();
