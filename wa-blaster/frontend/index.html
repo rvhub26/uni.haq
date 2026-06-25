@@ -62,11 +62,11 @@
   <!-- Device Selector -->
   <div style="padding:0 14px 12px;">
     <div style="font-size:0.72rem;color:#475569;font-weight:600;letter-spacing:0.05em;margin-bottom:6px;">PERANTI AKTIF</div>
-    <button id="device-selector-btn" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;">
+    <a href="#" id="device-selector-btn" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none;">
       <span id="device-status-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
       <span id="device-selector-name" style="font-size:0.8rem;color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Tiada peranti</span>
       <span style="color:#475569;font-size:0.7rem;">▼</span>
-    </button>
+    </a>
   </div>
 
   <div class="sidebar-footer">
@@ -92,16 +92,18 @@
       <div style="font-size:1.5rem;font-weight:700;color:#f1f5f9;"><span style="color:#22c55e;">uni</span><span style="color:#64748b;">.</span><span style="color:#94a3b8;">haq</span></div>
       <div style="font-size:0.8rem;color:#64748b;margin-top:4px;">Broadcast Platform</div>
     </div>
-    <div style="margin-bottom:14px;">
-      <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Username</label>
-      <input id="login-username" type="text" class="input-field" placeholder="Masukkan username..." autocomplete="username" />
-    </div>
-    <div style="margin-bottom:20px;">
-      <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Password</label>
-      <input id="login-password" type="password" class="input-field" placeholder="Masukkan password..." autocomplete="current-password" />
-    </div>
-    <div id="login-error" style="color:#ef4444;font-size:0.82rem;margin-bottom:12px;display:none;"></div>
-    <button id="btn-login" class="btn-primary" style="width:100%;padding:12px;font-size:1rem;">Log Masuk</button>
+    <form id="login-form" onsubmit="return false;" style="margin:0;">
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Username</label>
+        <input id="login-username" type="text" class="input-field" placeholder="Masukkan username..." autocomplete="username" />
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Password</label>
+        <input id="login-password" type="password" class="input-field" placeholder="Masukkan password..." autocomplete="current-password" />
+      </div>
+      <div id="login-error" style="color:#ef4444;font-size:0.82rem;margin-bottom:12px;display:none;"></div>
+      <input type="submit" id="btn-login" class="btn-primary" style="width:100%;padding:12px;font-size:1rem;border:none;cursor:pointer;" value="Log Masuk" />
+    </form>
   </div>
 </div>
 
