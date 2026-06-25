@@ -4,8 +4,18 @@ const { sendMessageDevice, sendMediaDevice, getDeviceStatus } = require('./whats
 const { processTemplate } = require('./templateEngine');
 const { UPLOAD_DIR } = require('./config');
 
+// Kira sendAt untuk satu contact dalam batch mode
+function calcSendAt(now, index, gapMs, batchSize, batchGapMs) {
+  if (batchSize && batchGapMs && batchSize > 0) {
+    const batchIndex = Math.floor(index / batchSize);
+    const posInBatch = index % batchSize;
+    return now + batchIndex * batchGapMs + posInBatch * gapMs;
+  }
+  return now + index * gapMs;
+}
+
 // Tambah contacts ke queue (single template atau rotation tanpa gap)
-function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, mediaFile, templateId, gapMs, startAt }) {
+function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, mediaFile, templateId, gapMs, startAt, batchSize, batchGapMs }) {
   const queue = readDeviceJSON(userId, deviceId, 'queue.json');
   const sentHistory = readDeviceJSONObject(userId, deviceId, 'sent_history.json');
   const now = startAt || Date.now();
@@ -24,18 +34,18 @@ function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, me
     templateId: templateId || null,
     templateText,
     mediaFile: mediaFile || null,
-    sendAt: now + i * gapMs,
+    sendAt: calcSendAt(now, i, gapMs, batchSize, batchGapMs),
     status: 'pending',
     createdAt: new Date().toISOString(),
   }));
 
   queue.push(...newItems);
   writeDeviceJSON(userId, deviceId, 'queue.json', queue);
-  return newItems.length;
+  return { queued: newItems.length, batches: batchSize ? Math.ceil(newItems.length / batchSize) : 1 };
 }
 
 // Queue rotation blast — semua template sekaligus dengan gap
-function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, templates, contactGapMs, templateGapMs, startAt }) {
+function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, templates, contactGapMs, templateGapMs, startAt, batchSize, batchGapMs }) {
   const queue = readDeviceJSON(userId, deviceId, 'queue.json');
   const sentHistory = readDeviceJSONObject(userId, deviceId, 'sent_history.json');
   const now = startAt || Date.now();
@@ -45,6 +55,8 @@ function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, template
     const alreadySent = sentHistory[contact.telefon] || [];
     const unsentTemplates = templates.filter(t => !alreadySent.includes(t.id));
     if (!unsentTemplates.length) return;
+
+    const baseTime = calcSendAt(now, contactIdx, contactGapMs, batchSize, batchGapMs);
 
     unsentTemplates.forEach((tmpl, tmplIdx) => {
       queue.push({
@@ -57,7 +69,7 @@ function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, template
         templateId: tmpl.id,
         templateText: tmpl.text,
         mediaFile: tmpl.mediaFile || null,
-        sendAt: now + contactIdx * contactGapMs + tmplIdx * templateGapMs,
+        sendAt: baseTime + tmplIdx * templateGapMs,
         status: 'pending',
         createdAt: new Date().toISOString(),
       });
@@ -66,7 +78,7 @@ function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, template
   });
 
   writeDeviceJSON(userId, deviceId, 'queue.json', queue);
-  return totalQueued;
+  return { queued: totalQueued, batches: batchSize ? Math.ceil(contacts.length / batchSize) : 1 };
 }
 
 // Proses queue untuk satu device

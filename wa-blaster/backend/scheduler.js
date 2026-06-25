@@ -44,19 +44,21 @@ async function runBlast(schedule, userId, deviceId) {
 
   const contactGapMs = schedule.contactGapMs || 4000;
   const templateGapMs = schedule.templateGapMs || 0;
+  const batchSize = schedule.batchSize || 0;
+  const batchGapMs = schedule.batchGapMs || 0;
 
   if (schedule.useRotation && schedule.templateIds?.length && templateGapMs > 0) {
     const allTmpl = readUserJSON(userId, 'templates.json');
     const templates = schedule.templateIds.map(id => allTmpl.find(t => t.id === id)).filter(Boolean);
     if (!templates.length) throw new Error('Template tidak dijumpai');
 
-    const count = enqueueRotationBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templates, contactGapMs, templateGapMs, startAt: Date.now() });
-    return { queued: count, contactGapMs, templateGapMs, templates: templates.length };
+    const result = enqueueRotationBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templates, contactGapMs, templateGapMs, startAt: Date.now(), batchSize, batchGapMs });
+    return { ...result, contactGapMs, templateGapMs, templates: templates.length, batchSize, batchGapMs };
   }
 
   const { templateText, mediaFile, templateId } = resolveTemplate(schedule, userId, deviceId);
-  const count = enqueueBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templateText, mediaFile, templateId, gapMs: contactGapMs, startAt: Date.now() });
-  return { queued: count, gapMs: contactGapMs };
+  const result = enqueueBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templateText, mediaFile, templateId, gapMs: contactGapMs, startAt: Date.now(), batchSize, batchGapMs });
+  return { ...result, gapMs: contactGapMs, batchSize, batchGapMs };
 }
 
 function timeMatches(pattern) {

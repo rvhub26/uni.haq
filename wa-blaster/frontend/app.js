@@ -626,6 +626,40 @@ document.getElementById('tmpl-gap-value').addEventListener('input', updateTmplGa
 document.getElementById('tmpl-gap-unit').addEventListener('change', updateTmplGapPreview);
 updateTmplGapPreview();
 
+// Batch blast toggle + preview
+function toggleBatchSettings(enabled) {
+  document.getElementById('batch-settings').style.display = enabled ? 'block' : 'none';
+  if (enabled) updateBatchPreview();
+}
+
+function updateBatchPreview() {
+  const size = parseInt(document.getElementById('batch-size').value) || 50;
+  const gapVal = Number(document.getElementById('batch-gap-value').value) || 12;
+  const gapUnit = Number(document.getElementById('batch-gap-unit').value);
+  const gapMs = gapVal * gapUnit;
+  const total = allContacts.length;
+  const batches = Math.ceil(total / size);
+  const previewEl = document.getElementById('batch-preview');
+
+  if (total && size) {
+    const totalTime = (batches - 1) * gapMs;
+    const hours = Math.round(totalTime / 3600000 * 10) / 10;
+    previewEl.style.display = 'block';
+    previewEl.innerHTML = `
+      <strong style="color:#22c55e;">Anggaran:</strong> ${total} contacts → ${batches} batch × ${size} nombor<br>
+      Masa total: ~${hours} jam | Setiap batch gap: ${formatGap(gapMs)}
+    `;
+  } else {
+    previewEl.style.display = 'none';
+  }
+}
+
+['batch-size', 'batch-gap-value', 'batch-gap-unit'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateBatchPreview);
+  if (el) el.addEventListener('change', updateBatchPreview);
+});
+
 document.getElementById('btn-save-schedule').addEventListener('click', async () => {
   const mode = document.querySelector('input[name="sched-mode"]:checked').value;
   const contactsMode = document.querySelector('input[name="sched-contacts"]:checked').value;
@@ -639,7 +673,15 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
   }
 
   const templateGapMs = Number(document.getElementById('tmpl-gap-value').value) * Number(document.getElementById('tmpl-gap-unit').value);
-  const body = { type: 'one-time', contacts, contactGapMs: gapMs, templateGapMs };
+
+  // Batch blast settings
+  const batchEnabled = document.getElementById('batch-enabled').checked;
+  const batchSize = batchEnabled ? parseInt(document.getElementById('batch-size').value) || 50 : 0;
+  const batchGapMs = batchEnabled
+    ? Number(document.getElementById('batch-gap-value').value) * Number(document.getElementById('batch-gap-unit').value)
+    : 0;
+
+  const body = { type: 'one-time', contacts, contactGapMs: gapMs, templateGapMs, batchSize, batchGapMs };
 
   if (mode === 'rotation') {
     const checked = [...document.querySelectorAll('input[name="rotation-tmpl-id"]:checked')].map(el => el.value);
@@ -664,6 +706,9 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
     const data = await res.json();
     if (!res.ok) { showToast(data.error, 'error'); return; }
     showToast('Jadual berjaya disimpan!');
+    // Reset batch checkbox
+    document.getElementById('batch-enabled').checked = false;
+    toggleBatchSettings(false);
     loadSchedules();
   } catch { showToast('Ralat simpan jadual', 'error'); }
 });
@@ -688,6 +733,7 @@ async function loadSchedules() {
             <span class="sch-chip">📆 ${when}</span>
             <span class="sch-chip">⏱ ${formatGap(s.contactGapMs || 4000)}/nombor</span>
             ${s.useRotation && s.templateGapMs ? `<span class="sch-chip">🔁 ${formatGap(s.templateGapMs)}/template</span>` : ''}
+            ${s.batchSize ? `<span class="sch-chip" style="background:#22c55e20;color:#22c55e;">🛡 ${s.batchSize}/batch · ${formatGap(s.batchGapMs)}</span>` : ''}
             <span class="sch-status ${s.status}">${s.status === 'active' ? '● Aktif' : '✓ Selesai'}</span>
           </div>
         </div>
@@ -728,10 +774,11 @@ async function blastNow(id) {
     const res = await fetch(`/api/schedules/${id}/blast-now`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) { showToast(data.error, 'error'); return; }
+    const batchInfo = data.batchSize ? ` | 🛡 ${data.batches} batch × ${data.batchSize} (gap ${formatGap(data.batchGapMs)})` : '';
     const gapInfo = data.templateGapMs
-      ? `${data.templates} template × ${data.queued / data.templates | 0} contacts | Gap template: ${formatGap(data.templateGapMs)}`
-      : `${data.queued} mesej | Gap: ${formatGap(data.gapMs)}`;
-    showToast(`✓ Queue: ${gapInfo}`);
+      ? `${data.templates} template × ${(data.queued / data.templates) | 0} contacts`
+      : `${data.queued} mesej`;
+    showToast(`✓ Queue: ${gapInfo}${batchInfo}`);
     loadQueue(); loadSchedules();
   } catch { showToast('Ralat semasa blast', 'error'); }
 }

@@ -11,7 +11,7 @@ function ctx(req) { return { userId: req.session.userId, deviceId: req.session.d
 
 router.post('/', requireDevice, (req, res) => {
   const { userId, deviceId } = ctx(req);
-  const { template, mediaFile, type, datetime, pattern, contacts, useRotation, templateIds, contactGapMs, templateGapMs } = req.body;
+  const { template, mediaFile, type, datetime, pattern, contacts, useRotation, templateIds, contactGapMs, templateGapMs, batchSize, batchGapMs } = req.body;
 
   if (!type || !['one-time', 'recurring'].includes(type)) return res.status(400).json({ error: 'Jenis jadual tidak sah' });
   if (type === 'one-time' && !datetime) return res.status(400).json({ error: 'Tarikh & masa diperlukan' });
@@ -38,6 +38,8 @@ router.post('/', requireDevice, (req, res) => {
     contacts: contacts || 'all',
     contactGapMs: contactGapMs || 4000,
     templateGapMs: templateGapMs || 0,
+    batchSize: (batchSize && batchSize > 0) ? parseInt(batchSize) : 0,
+    batchGapMs: batchGapMs || 0,
     status: 'active',
     createdAt: new Date().toISOString(),
   };
