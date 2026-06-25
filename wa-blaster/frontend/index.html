@@ -67,6 +67,13 @@
       <span id="device-selector-name" style="font-size:0.8rem;color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Tiada peranti</span>
       <span style="color:#475569;font-size:0.7rem;">▼</span>
     </a>
+    <script>
+    document.getElementById('device-selector-btn').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('device-mgmt-modal').style.display = 'flex';
+      if (typeof loadDevices === 'function') loadDevices();
+    });
+    </script>
   </div>
 
   <div class="sidebar-footer">
@@ -75,6 +82,21 @@
       <button id="btn-user-mgmt" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;display:none;">👥 Pengguna</button>
       <button id="btn-logout" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:6px;cursor:pointer;">Log Keluar</button>
     </div>
+    <script>
+    document.getElementById('btn-logout').addEventListener('click', function() {
+      fetch('/api/auth/logout', {method:'POST'}).then(function() {
+        document.getElementById('login-overlay').style.display = 'flex';
+        document.getElementById('login-username').value = '';
+        document.getElementById('login-password').value = '';
+        document.getElementById('sidebar-username').textContent = '—';
+        document.getElementById('btn-user-mgmt').style.display = 'none';
+      });
+    });
+    document.getElementById('btn-user-mgmt').addEventListener('click', function() {
+      document.getElementById('user-mgmt-modal').style.display = 'flex';
+      if (typeof loadUsers === 'function') loadUsers();
+    });
+    </script>
   </div>
 </aside>
 
@@ -157,6 +179,14 @@
     <!-- Device list -->
     <div id="devices-list-mgmt"><p class="empty-pick">Tiada peranti lagi. Tambah nombor WhatsApp untuk mula.</p></div>
   </div>
+  <script>
+  document.getElementById('btn-close-device-mgmt').addEventListener('click', function() {
+    document.getElementById('device-mgmt-modal').style.display = 'none';
+  });
+  document.getElementById('btn-add-device').addEventListener('click', function() {
+    if (typeof addDevice === 'function') addDevice();
+  });
+  </script>
 </div>
 
 <!-- ── User Management Modal ── -->
@@ -183,6 +213,14 @@
     </div>
     <div id="users-list-mgmt"><p class="empty-pick">Tiada pengguna</p></div>
   </div>
+  <script>
+  document.getElementById('btn-close-user-mgmt').addEventListener('click', function() {
+    document.getElementById('user-mgmt-modal').style.display = 'none';
+  });
+  document.getElementById('btn-add-user').addEventListener('click', function() {
+    if (typeof addUser === 'function') addUser();
+  });
+  </script>
 </div>
 
 <!-- ── Main ── -->
