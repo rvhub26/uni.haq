@@ -426,31 +426,37 @@
             </div>
 
             <!-- Step 5: Batch Blast (Anti-Ban) -->
-            <div class="field-group" style="background:#0f172a;border:1px solid #1e3a1e;border-radius:10px;padding:14px;">
-              <label class="step-label" style="margin-bottom:10px;">
+            <div class="field-group">
+              <label class="step-label" style="margin-bottom:4px;">
                 <span class="step-num" style="background:#22c55e20;color:#22c55e;">5</span>
-                Batch Blast <span style="font-size:0.75rem;color:#22c55e;font-weight:500;background:#22c55e15;padding:2px 8px;border-radius:4px;margin-left:6px;">Anti-Ban</span>
+                Had Nombor Per Sesi <span style="font-size:0.72rem;color:#22c55e;background:#22c55e15;padding:2px 7px;border-radius:4px;margin-left:6px;">Anti-Ban</span>
               </label>
-              <p class="field-hint" style="margin-bottom:12px;">Hadkan bilangan nombor per sesi blast. Selepas setiap batch, sistem rehat sebelum sambung batch seterusnya.</p>
+              <p class="field-hint" style="margin-bottom:10px;">Sesuai untuk nombor berisiko — blast dalam kumpulan kecil dengan rehat antara setiap kumpulan.</p>
 
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#94a3b8;font-size:0.85rem;">
-                  <input type="checkbox" id="batch-enabled" onchange="toggleBatchSettings(this.checked)" style="width:16px;height:16px;accent-color:#22c55e;" />
-                  Aktifkan Batch Blast
+              <!-- Pilihan Ya / Tidak -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                <label id="batch-no-label" onclick="toggleBatchSettings(false)" style="cursor:pointer;border:2px solid #22c55e;background:#22c55e15;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+                  <input type="radio" name="batch-mode" value="no" checked style="accent-color:#22c55e;" />
+                  <span style="color:#f1f5f9;font-size:0.85rem;font-weight:500;">Tidak Perlu</span>
+                </label>
+                <label id="batch-yes-label" onclick="toggleBatchSettings(true)" style="cursor:pointer;border:2px solid #334155;background:#0f172a;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+                  <input type="radio" name="batch-mode" value="yes" style="accent-color:#22c55e;" />
+                  <span style="color:#94a3b8;font-size:0.85rem;font-weight:500;">Ya, Hadkan Per Batch</span>
                 </label>
               </div>
 
-              <div id="batch-settings" style="display:none;">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <!-- Settings (tersembunyi by default) -->
+              <div id="batch-settings" style="display:none;background:#0f172a;border:1px solid #1e3a1e;border-radius:10px;padding:14px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
                   <div>
                     <label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:6px;">Max Nombor Per Batch</label>
-                    <input type="number" id="batch-size" class="input-field" value="50" min="1" max="500" placeholder="50" />
-                    <p class="field-hint" style="margin-top:4px;">Cth: 50 nombor per sesi</p>
+                    <input type="number" id="batch-size" class="input-field" value="50" min="1" max="500" />
+                    <p class="field-hint" style="margin-top:4px;">Cth: 50 nombor setiap sesi</p>
                   </div>
                   <div>
-                    <label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:6px;">Gap Antara Batch</label>
+                    <label style="font-size:0.78rem;color:#94a3b8;display:block;margin-bottom:6px;">Rehat Antara Batch</label>
                     <div style="display:flex;gap:6px;">
-                      <input type="number" id="batch-gap-value" class="input-field" value="12" min="1" style="width:70px;" />
+                      <input type="number" id="batch-gap-value" class="input-field" value="12" min="1" style="width:75px;" />
                       <select id="batch-gap-unit" class="input-field">
                         <option value="60000">Minit</option>
                         <option value="3600000" selected>Jam</option>
@@ -460,7 +466,7 @@
                     <p class="field-hint" style="margin-top:4px;">Cth: rehat 12 jam</p>
                   </div>
                 </div>
-                <div id="batch-preview" style="margin-top:12px;padding:10px;background:#1e293b;border-radius:8px;font-size:0.82rem;color:#64748b;display:none;"></div>
+                <div id="batch-preview" style="padding:10px;background:#1e293b;border-radius:8px;font-size:0.82rem;color:#64748b;display:none;"></div>
               </div>
             </div>
 

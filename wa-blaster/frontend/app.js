@@ -629,6 +629,19 @@ updateTmplGapPreview();
 // Batch blast toggle + preview
 function toggleBatchSettings(enabled) {
   document.getElementById('batch-settings').style.display = enabled ? 'block' : 'none';
+
+  // Style pilihan aktif
+  const noLabel = document.getElementById('batch-no-label');
+  const yesLabel = document.getElementById('batch-yes-label');
+  if (noLabel && yesLabel) {
+    noLabel.style.border = enabled ? '2px solid #334155' : '2px solid #22c55e';
+    noLabel.style.background = enabled ? '#0f172a' : '#22c55e15';
+    noLabel.querySelector('span').style.color = enabled ? '#64748b' : '#f1f5f9';
+    yesLabel.style.border = enabled ? '2px solid #22c55e' : '2px solid #334155';
+    yesLabel.style.background = enabled ? '#22c55e15' : '#0f172a';
+    yesLabel.querySelector('span').style.color = enabled ? '#f1f5f9' : '#94a3b8';
+  }
+
   if (enabled) updateBatchPreview();
 }
 
@@ -675,7 +688,7 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
   const templateGapMs = Number(document.getElementById('tmpl-gap-value').value) * Number(document.getElementById('tmpl-gap-unit').value);
 
   // Batch blast settings
-  const batchEnabled = document.getElementById('batch-enabled').checked;
+  const batchEnabled = document.querySelector('input[name="batch-mode"]:checked')?.value === 'yes';
   const batchSize = batchEnabled ? parseInt(document.getElementById('batch-size').value) || 50 : 0;
   const batchGapMs = batchEnabled
     ? Number(document.getElementById('batch-gap-value').value) * Number(document.getElementById('batch-gap-unit').value)
@@ -706,9 +719,9 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
     const data = await res.json();
     if (!res.ok) { showToast(data.error, 'error'); return; }
     showToast('Jadual berjaya disimpan!');
-    // Reset batch checkbox
-    document.getElementById('batch-enabled').checked = false;
-    toggleBatchSettings(false);
+    // Reset batch ke "Tidak Perlu"
+    const noRadio = document.querySelector('input[name="batch-mode"][value="no"]');
+    if (noRadio) { noRadio.checked = true; toggleBatchSettings(false); }
     loadSchedules();
   } catch { showToast('Ralat simpan jadual', 'error'); }
 });
