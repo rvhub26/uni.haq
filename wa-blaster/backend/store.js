@@ -22,9 +22,25 @@ function readJSON(filename) {
   }
 }
 
+// Untuk fail JSON yang bentuk objek {}, bukan array []
+function readJSONObject(filename) {
+  const filePath = path.join(DATA_DIR, filename);
+  try {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, '{}', 'utf8');
+      return {};
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function writeJSON(filename, data) {
   const filePath = path.join(DATA_DIR, filename);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
-module.exports = { readJSON, writeJSON };
+module.exports = { readJSON, readJSONObject, writeJSON };

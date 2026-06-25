@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { readJSON, writeJSON } = require('./store');
+const { readJSON, readJSONObject, writeJSON } = require('./store');
 const { getStatus } = require('./whatsapp');
 const { enqueueBlast, enqueueRotationBlast, processQueue } = require('./queue');
 
@@ -18,9 +18,9 @@ function resolveTemplate(schedule) {
     const si = list.findIndex(s => s.id === schedule.id);
     if (si >= 0) { list[si].rotationIndex = idx + 1; writeJSON('schedules.json', list); }
 
-    return { templateText: tmpl.text, mediaFile: tmpl.mediaFile || null };
+    return { templateId: tmpl.id, templateText: tmpl.text, mediaFile: tmpl.mediaFile || null };
   }
-  return { templateText: schedule.template, mediaFile: schedule.mediaFile || null };
+  return { templateId: null, templateText: schedule.template, mediaFile: schedule.mediaFile || null };
 }
 
 // Masukkan contacts ke queue dan mulakan drip send
@@ -28,11 +28,28 @@ async function runBlast(schedule) {
   if (!getStatus().connected) throw new Error('WhatsApp tidak bersambung');
 
   const allContacts = readJSON('contacts.json');
-  const targets = schedule.contacts === 'all'
+  const raw = schedule.contacts === 'all'
     ? allContacts
-    : allContacts.filter(c => schedule.contacts.includes(c.id));
+    : Array.isArray(schedule.contacts)
+      ? allContacts.filter(c => schedule.contacts.includes(c.id))
+      : schedule.contacts?.kumpulan
+        ? allContacts.filter(c => schedule.contacts.kumpulan.includes(c.kumpulan || 'Umum'))
+        : allContacts;
 
-  if (!targets.length) throw new Error('Tiada contacts untuk diblast');
+  // Deduplicate by phone — elak hantar 2 kali ke nombor sama
+  const seen = new Set();
+  const deduped = raw.filter(c => {
+    if (seen.has(c.telefon)) return false;
+    seen.add(c.telefon);
+    return true;
+  });
+
+  // Filter blacklist
+  const blacklist = readJSON('blacklist.json');
+  const blacklistSet = new Set(blacklist.map(b => b.telefon));
+  const targets = deduped.filter(c => !blacklistSet.has(c.telefon));
+
+  if (!targets.length) throw new Error('Tiada contacts untuk diblast (semua mungkin dalam blacklist)');
 
   const contactGapMs = schedule.contactGapMs || 4000;
   const templateGapMs = schedule.templateGapMs || 0;
@@ -55,12 +72,13 @@ async function runBlast(schedule) {
   }
 
   // Mod biasa: satu template sahaja (atau rotation tanpa templateGap)
-  const { templateText, mediaFile } = resolveTemplate(schedule);
+  const { templateText, mediaFile, templateId } = resolveTemplate(schedule);
   const count = enqueueBlast({
     scheduleId: schedule.id,
     contacts: targets,
     templateText,
     mediaFile,
+    templateId,
     gapMs: contactGapMs,
     startAt: Date.now(),
   });

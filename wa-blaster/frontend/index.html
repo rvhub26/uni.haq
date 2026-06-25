@@ -53,6 +53,10 @@
       <span class="nav-icon">⏳</span>
       <span>Queue &amp; Log</span>
     </a>
+    <a class="nav-item" data-tab="laporan">
+      <span class="nav-icon">📊</span>
+      <span>Laporan</span>
+    </a>
   </nav>
 
   <div class="sidebar-footer">
@@ -60,8 +64,68 @@
       <span id="nav-status-dot" class="status-dot disconnected"></span>
       <span id="nav-status-text">Tidak Bersambung</span>
     </div>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;">
+      <div style="font-size:0.78rem;color:#64748b;margin-bottom:6px;">Log masuk sebagai: <span id="sidebar-username" style="color:#94a3b8;font-weight:600;">—</span></div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="showUserMgmt()" id="btn-user-mgmt" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;display:none;">👥 Pengguna</button>
+        <button onclick="doLogout()" style="flex:1;font-size:0.75rem;padding:5px 8px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:6px;cursor:pointer;">Log Keluar</button>
+      </div>
+    </div>
   </div>
 </aside>
+
+<!-- ── Login Overlay ── -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:40px;width:100%;max-width:380px;box-shadow:0 25px 50px #00000080;">
+    <div style="text-align:center;margin-bottom:28px;">
+      <svg viewBox="0 0 40 40" fill="none" style="width:48px;height:48px;margin:0 auto 12px;">
+        <defs><linearGradient id="lg2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#22c55e"/><stop offset="100%" stop-color="#075E54"/></linearGradient></defs>
+        <rect width="40" height="40" rx="11" fill="url(#lg2)"/>
+        <path d="M8 20L32 9L25 31L19 23L8 20Z" fill="white"/>
+        <path d="M19 23L25 31L28 17" stroke="#075E54" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+        <circle cx="19" cy="23" r="1.8" fill="#c8ffd4"/>
+      </svg>
+      <div style="font-size:1.5rem;font-weight:700;color:#f1f5f9;"><span style="color:#22c55e;">uni</span><span style="color:#64748b;">.</span><span style="color:#94a3b8;">haq</span></div>
+      <div style="font-size:0.8rem;color:#64748b;margin-top:4px;">Broadcast Platform</div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Username</label>
+      <input id="login-username" type="text" class="input-field" placeholder="Masukkan username..." autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()" />
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="display:block;font-size:0.8rem;color:#94a3b8;margin-bottom:6px;">Password</label>
+      <input id="login-password" type="password" class="input-field" placeholder="Masukkan password..." autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+    </div>
+    <div id="login-error" style="color:#ef4444;font-size:0.82rem;margin-bottom:12px;display:none;"></div>
+    <button onclick="doLogin()" class="btn-primary" style="width:100%;padding:12px;font-size:1rem;">Log Masuk</button>
+  </div>
+</div>
+
+<!-- ── User Management Modal ── -->
+<div id="user-mgmt-modal" style="display:none;position:fixed;inset:0;background:#00000080;z-index:9998;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="color:#f1f5f9;">👥 Urus Pengguna</h2>
+      <button onclick="closeUserMgmt()" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <!-- Form tambah user -->
+    <div style="background:#0f172a;border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:12px;font-weight:600;">TAMBAH PENGGUNA BARU</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="text" id="new-username" class="input-field" placeholder="Username" />
+        <input type="password" id="new-password" class="input-field" placeholder="Password" />
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <select id="new-role" class="input-field" style="flex:1;">
+          <option value="user">User biasa</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button onclick="addUser()" class="btn-primary" style="white-space:nowrap;">+ Tambah</button>
+      </div>
+    </div>
+    <div id="users-list-mgmt"><p class="empty-pick">Tiada pengguna</p></div>
+  </div>
+</div>
 
 <!-- ── Main ── -->
 <main class="main">
@@ -143,31 +207,53 @@
     <div class="page-header">
       <div>
         <h1>👥 Contacts <span class="count-badge" id="contact-count">0</span></h1>
-        <div class="page-header-sub">Urus senarai penerima blast</div>
+        <div class="page-header-sub">Urus senarai penerima blast ikut kumpulan</div>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <label class="btn-primary" style="cursor:pointer;">
-          📂 Upload Excel
-          <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" />
-        </label>
-        <button class="btn-danger" id="btn-clear-all">🗑 Kosongkan</button>
-      </div>
+      <button class="btn-danger" id="btn-clear-all">🗑 Kosongkan Semua</button>
     </div>
     <div class="page-content">
-      <div class="card">
-        <div class="info-box">
-          💡 Format Excel: header kolum mesti <strong>nama</strong> dan <strong>telefon</strong>
-        </div>
-        <div id="upload-status" style="margin-bottom:10px;font-size:0.88rem;font-weight:500;"></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>#</th><th>Nama</th><th>Telefon</th><th></th></tr></thead>
-            <tbody id="contacts-body">
-              <tr><td colspan="4" class="empty-row">Tiada contacts lagi. Upload Excel untuk mula.</td></tr>
-            </tbody>
-          </table>
-        </div>
+
+      <!-- Search Bar -->
+      <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;">
+        <input type="text" id="contact-search" class="input-field" placeholder="🔍  Cari nama atau nombor..." style="flex:1;" />
+        <button id="btn-blacklist-from-search" class="btn-danger" style="white-space:nowrap;display:none;">🚫 Blacklist Nombor Ini</button>
       </div>
+
+      <!-- Upload Section -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-header" style="margin-bottom:14px;">
+          <h2>📂 Upload Excel</h2>
+        </div>
+        <div class="info-box" style="margin-bottom:12px;">
+          💡 Format Excel: kolum <strong>nama</strong> dan <strong>telefon</strong>. Setiap Excel = satu kumpulan.
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="field-group" style="margin-bottom:0;flex:1;min-width:180px;">
+            <label class="field-label" style="margin-bottom:6px;">Nama Kumpulan</label>
+            <input type="text" id="kumpulan-name-input" class="input-field" placeholder="Cth: Customer VVIP, Customer Jun..." />
+          </div>
+          <label class="btn-primary" style="cursor:pointer;white-space:nowrap;">
+            📂 Pilih Fail Excel
+            <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" />
+          </label>
+        </div>
+        <div id="upload-status" style="margin-top:10px;font-size:0.88rem;font-weight:500;"></div>
+      </div>
+
+      <!-- Groups Display -->
+      <div id="contacts-groups">
+        <p class="empty-pick" style="padding:20px 0;">Tiada contacts lagi. Upload Excel untuk mula.</p>
+      </div>
+
+      <!-- Blacklist Section -->
+      <div class="card" style="margin-top:24px;border:1px solid #ef444440;">
+        <div class="card-header" style="margin-bottom:12px;">
+          <h2>🚫 Blacklist <span class="count-badge" id="blacklist-count" style="background:#ef4444;">0</span></h2>
+          <span style="font-size:0.8rem;color:#94a3b8;">Nombor ni tak akan terima blast</span>
+        </div>
+        <div id="blacklist-list"><p class="empty-pick">Tiada nombor dalam blacklist</p></div>
+      </div>
+
     </div>
   </div>
 
@@ -281,51 +367,23 @@
               </div>
             </div>
 
-            <!-- Step 2: Timing -->
+            <!-- Step 2: Timing (optional) -->
             <div class="field-group">
-              <label class="step-label"><span class="step-num">2</span> Bila Nak Blast?</label>
-              <div class="radio-group" style="margin-top:8px;">
-                <label><input type="radio" name="sched-type" value="one-time" checked /> Sekali Sahaja</label>
-                <label><input type="radio" name="sched-type" value="recurring" /> Berulang</label>
-              </div>
-              <div id="one-time-fields" style="margin-top:10px;">
-                <input type="datetime-local" id="sched-datetime" class="input-field" />
-              </div>
-              <div id="recurring-fields" style="display:none;margin-top:10px;display:flex;flex-direction:column;gap:10px;">
-                <select id="sched-frequency" class="input-field">
-                  <option value="daily">Setiap Hari</option>
-                  <option value="weekly">Setiap Minggu</option>
-                  <option value="monthly">Setiap Bulan</option>
-                </select>
-                <div id="weekly-days" style="display:none;">
-                  <div class="days-row">
-                    <label><input type="checkbox" name="sched-day" value="0" /> Ahad</label>
-                    <label><input type="checkbox" name="sched-day" value="1" /> Isnin</label>
-                    <label><input type="checkbox" name="sched-day" value="2" /> Selasa</label>
-                    <label><input type="checkbox" name="sched-day" value="3" /> Rabu</label>
-                    <label><input type="checkbox" name="sched-day" value="4" /> Khamis</label>
-                    <label><input type="checkbox" name="sched-day" value="5" /> Jumaat</label>
-                    <label><input type="checkbox" name="sched-day" value="6" /> Sabtu</label>
-                  </div>
-                </div>
-                <div id="monthly-day" style="display:none;">
-                  <input type="number" id="sched-day-of-month" class="input-field" min="1" max="28" placeholder="Tarikh (1-28)" style="width:160px;" />
-                </div>
-                <input type="time" id="sched-time" class="input-field" style="width:140px;" />
-              </div>
+              <label class="step-label"><span class="step-num">2</span> Masa Mula <span style="font-weight:400;color:#94a3b8;font-size:0.82rem;">(pilihan — kosongkan untuk blast terus)</span></label>
+              <input type="datetime-local" id="sched-datetime" class="input-field" style="margin-top:8px;" />
             </div>
 
             <!-- Step 3: Contacts -->
             <div class="field-group">
               <label class="step-label"><span class="step-num">3</span> Hantar Kepada</label>
               <div class="radio-group" style="margin-top:8px;">
-                <label><input type="radio" name="sched-contacts" value="all" checked /> Semua Contacts</label>
-                <label><input type="radio" name="sched-contacts" value="select" /> Pilih Tertentu</label>
+                <label><input type="radio" name="sched-contacts" value="all" checked onchange="toggleKumpulanList(this)" /> Semua Contacts</label>
+                <label><input type="radio" name="sched-contacts" value="kumpulan" onchange="toggleKumpulanList(this)" /> Pilih Kumpulan</label>
               </div>
-              <div id="contact-select-list" style="display:none;margin-top:10px;" class="pick-list"></div>
+              <div id="kumpulan-select-list" style="display:none;margin-top:10px;" class="pick-list"></div>
             </div>
 
-            <!-- Step 4: Gap -->
+            <!-- Step 3: Gap -->
             <div class="field-group">
               <label class="step-label"><span class="step-num">4</span> Gap Antara Setiap Nombor</label>
               <p class="field-hint" style="margin-bottom:8px;">Contact 1 sekarang, Contact 2 selepas gap ini (elak ban).</p>
@@ -386,6 +444,103 @@
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <!-- ══ LAPORAN ══ -->
+  <div id="tab-laporan" class="tab-panel">
+    <div class="page-header">
+      <div>
+        <h1>📊 Laporan</h1>
+        <div class="page-header-sub">Prestasi blast dan rekod close sales</div>
+      </div>
+      <button onclick="loadLaporan()" class="btn-secondary" style="white-space:nowrap;">↺ Refresh</button>
+    </div>
+    <div class="page-content">
+
+      <!-- Stat Cards -->
+      <div class="stats-grid" id="rpt-stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px;">
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="rpt-total">—</div>
+            <div class="stat-label">Total Blast</div>
+          </div>
+          <div class="stat-icon blue">📤</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="rpt-berjaya">—</div>
+            <div class="stat-label">Berjaya</div>
+            <div id="rpt-pct-berjaya" style="font-size:0.8rem;color:#22c55e;margin-top:2px;">0%</div>
+          </div>
+          <div class="stat-icon green">✅</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="rpt-failed">—</div>
+            <div class="stat-label">Gagal</div>
+            <div id="rpt-pct-failed" style="font-size:0.8rem;color:#ef4444;margin-top:2px;">0%</div>
+          </div>
+          <div class="stat-icon red">❌</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="rpt-replied">—</div>
+            <div class="stat-label">Ada Reply</div>
+            <div id="rpt-pct-replied" style="font-size:0.8rem;color:#f59e0b;margin-top:2px;">0%</div>
+          </div>
+          <div class="stat-icon orange">💬</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info">
+            <div class="stat-num" id="rpt-sales-rm" style="font-size:1.2rem;">RM 0</div>
+            <div class="stat-label">Close Sales</div>
+            <div id="rpt-sales-count" style="font-size:0.8rem;color:#a855f7;margin-top:2px;">0 jualan</div>
+          </div>
+          <div class="stat-icon purple">💰</div>
+        </div>
+      </div>
+
+      <!-- Replies Section -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-header" style="margin-bottom:12px;">
+          <h2>💬 Contacts Yang Balas <span class="count-badge" id="rpt-reply-count" style="background:#f59e0b;">0</span></h2>
+          <span style="font-size:0.8rem;color:#64748b;">Auto-detect bila contact reply mesej kita</span>
+        </div>
+        <div id="rpt-replies-list"><p class="empty-pick">Tiada balas lagi. Sistem akan detect bila contact reply.</p></div>
+      </div>
+
+      <!-- Sales Section -->
+      <div class="card" id="sales-form-section">
+        <div class="card-header" style="margin-bottom:16px;">
+          <h2>💰 Rekod Close Sales</h2>
+        </div>
+
+        <!-- Form tambah -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;margin-bottom:16px;align-items:end;">
+          <div>
+            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:4px;">Nama / Nombor</label>
+            <input type="text" id="sales-nama" class="input-field" placeholder="Nama pelanggan..." />
+          </div>
+          <div>
+            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:4px;">RM Jumlah</label>
+            <input type="number" id="sales-amount" class="input-field" placeholder="0.00" step="0.01" min="0" />
+          </div>
+          <div>
+            <label style="font-size:0.8rem;color:#94a3b8;display:block;margin-bottom:4px;">Nota</label>
+            <input type="text" id="sales-notes" class="input-field" placeholder="Produk, pakej... (optional)" />
+          </div>
+          <button onclick="addSale()" class="btn-primary" style="white-space:nowrap;height:42px;">💰 Rekod</button>
+        </div>
+
+        <!-- Jumlah total -->
+        <div style="text-align:right;margin-bottom:12px;font-size:0.9rem;color:#94a3b8;">
+          Jumlah: <span id="rpt-sales-total" style="color:#a855f7;font-weight:700;font-size:1rem;">RM 0.00</span>
+        </div>
+
+        <div id="rpt-sales-list"><p class="empty-pick">Tiada rekod jualan lagi</p></div>
+      </div>
+
     </div>
   </div>
 

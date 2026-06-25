@@ -1,9 +1,129 @@
+// ── Auth ───────────────────────────────────────────────
+async function checkAuth() {
+  const data = await fetch('/api/auth/check').then(r => r.json());
+  const overlay = document.getElementById('login-overlay');
+  if (!data.loggedIn) {
+    overlay.style.display = 'flex';
+    return false;
+  }
+  overlay.style.display = 'none';
+  document.getElementById('sidebar-username').textContent = data.username;
+  if (data.role === 'admin') {
+    document.getElementById('btn-user-mgmt').style.display = 'block';
+  }
+  return true;
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if (!username || !password) {
+    errEl.textContent = 'Sila masukkan username dan password';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    errEl.textContent = data.error || 'Log masuk gagal';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('sidebar-username').textContent = data.username;
+  if (data.role === 'admin') document.getElementById('btn-user-mgmt').style.display = 'block';
+  showToast('Selamat datang, ' + data.username + '!');
+  loadAll();
+}
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('sidebar-username').textContent = '—';
+  document.getElementById('btn-user-mgmt').style.display = 'none';
+  showToast('Dah log keluar');
+}
+
+async function showUserMgmt() {
+  document.getElementById('user-mgmt-modal').style.display = 'flex';
+  loadUsersList();
+}
+
+function closeUserMgmt() {
+  document.getElementById('user-mgmt-modal').style.display = 'none';
+}
+
+async function loadUsersList() {
+  const users = await fetch('/api/auth/users').then(r => r.json());
+  const el = document.getElementById('users-list-mgmt');
+  if (!users.length) { el.innerHTML = '<p class="empty-pick">Tiada pengguna</p>'; return; }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Username</th><th>Role</th><th>Dibuat</th><th></th></tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr class="contact-row">
+              <td style="font-weight:600;">${escHtml(u.username)}</td>
+              <td><span style="font-size:0.75rem;padding:2px 8px;border-radius:4px;background:${u.role==='admin'?'#a855f720':'#22c55e20'};color:${u.role==='admin'?'#a855f7':'#22c55e'};">${u.role}</span></td>
+              <td style="color:#64748b;font-size:0.8rem;">${new Date(u.createdAt).toLocaleDateString('ms-MY')}</td>
+              <td style="text-align:right;"><button class="btn-del" onclick="deleteUser('${u.id}','${escHtml(u.username)}')">🗑</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function addUser() {
+  const username = document.getElementById('new-username').value.trim();
+  const password = document.getElementById('new-password').value;
+  const role = document.getElementById('new-role').value;
+  if (!username || !password) { showToast('Isi username dan password', 'error'); return; }
+
+  const res = await fetch('/api/auth/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, role }),
+  });
+  const data = await res.json();
+  if (!res.ok) { showToast(data.error, 'error'); return; }
+
+  document.getElementById('new-username').value = '';
+  document.getElementById('new-password').value = '';
+  loadUsersList();
+  showToast('Pengguna ' + username + ' berjaya ditambah');
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`Buang pengguna "${username}"?`)) return;
+  const res = await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (!res.ok) { showToast(data.error, 'error'); return; }
+  loadUsersList();
+  showToast('Pengguna dibuang', 'error');
+}
+
 // ── Tab navigation ────────────────────────────────────
 function switchTab(tabName) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`tab-${tabName}`)?.classList.add('active');
   document.querySelector(`.nav-item[data-tab="${tabName}"]`)?.classList.add('active');
+  if (tabName === 'laporan') loadLaporan();
 }
 
 document.querySelectorAll('.nav-item, .link-btn').forEach(el => {
@@ -55,28 +175,122 @@ async function checkStatus() {
 
 // ── Contacts ───────────────────────────────────────────
 let allContacts = [];
+let allBlacklist = [];
+let allReplies = [];
 
 async function loadContacts() {
-  allContacts = await fetch('/api/contacts').then(r => r.json());
-  renderContacts(allContacts);
+  [allContacts, allBlacklist, allReplies] = await Promise.all([
+    fetch('/api/contacts').then(r => r.json()),
+    fetch('/api/blacklist').then(r => r.json()),
+    fetch('/api/reports/replies').then(r => r.json()),
+  ]);
+  const search = document.getElementById('contact-search')?.value || '';
+  renderContactGroups(filterContacts(allContacts, search));
+  renderBlacklist();
   renderContactSelectList();
+  renderKumpulanSelectList();
   updateStats();
 }
 
-function renderContacts(list) {
+function filterContacts(list, query) {
+  if (!query.trim()) return list;
+  const q = query.toLowerCase();
+  return list.filter(c =>
+    c.nama.toLowerCase().includes(q) || c.telefon.includes(q)
+  );
+}
+
+document.getElementById('contact-search').addEventListener('input', (e) => {
+  const val = e.target.value.trim();
+  const filtered = filterContacts(allContacts, val);
+  renderContactGroups(filtered);
+
+  // Tunjuk butang blacklist terus bila ada input
+  const btn = document.getElementById('btn-blacklist-from-search');
+  btn.style.display = val ? 'block' : 'none';
+});
+
+document.getElementById('btn-blacklist-from-search').addEventListener('click', async () => {
+  const val = document.getElementById('contact-search').value.trim();
+  if (!val) return;
+
+  // Cuba cari dalam contacts dulu
+  const found = allContacts.find(c => c.telefon.includes(val) || c.nama.toLowerCase().includes(val.toLowerCase()));
+  const telefon = found ? found.telefon : val.replace(/\D/g, '').replace(/^0/, '60');
+  const nama = found ? found.nama : val;
+
+  if (!telefon) { showToast('Masukkan nombor yang sah', 'error'); return; }
+
+  await fetch('/api/blacklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ telefon, nama }),
+  });
+
+  document.getElementById('contact-search').value = '';
+  document.getElementById('btn-blacklist-from-search').style.display = 'none';
+  loadContacts();
+  showToast(`🚫 ${nama} (${telefon}) ditambah ke blacklist`, 'error');
+});
+
+function getGroups(list) {
+  const map = {};
+  list.forEach(c => {
+    const k = c.kumpulan || 'Umum';
+    if (!map[k]) map[k] = [];
+    map[k].push(c);
+  });
+  return map;
+}
+
+function renderContactGroups(list) {
   document.getElementById('contact-count').textContent = list.length;
-  const tbody = document.getElementById('contacts-body');
+  const el = document.getElementById('contacts-groups');
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-row">Tiada contacts lagi. Upload Excel untuk mula.</td></tr>';
+    el.innerHTML = '<p class="empty-pick" style="padding:20px 0;">Tiada contacts lagi. Upload Excel untuk mula.</p>';
     return;
   }
-  tbody.innerHTML = list.map((c, i) => `
-    <tr class="contact-row">
-      <td style="color:#94a3b8;font-size:0.8rem;">${i + 1}</td>
-      <td>${escHtml(c.nama)}</td>
-      <td>${escHtml(c.telefon)}</td>
-      <td style="text-align:right;"><button class="btn-del" onclick="deleteContact('${c.id}')">🗑</button></td>
-    </tr>
+  const groups = getGroups(list);
+  const blacklistSet = new Set(allBlacklist.map(b => b.telefon));
+  const repliedSet = new Set(allReplies.map(r => r.telefon));
+
+  el.innerHTML = Object.entries(groups).map(([nama, contacts]) => `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="margin-bottom:12px;">
+        <h2>📁 ${escHtml(nama)} <span class="count-badge">${contacts.length}</span></h2>
+        <button class="btn-danger" style="font-size:0.78rem;padding:5px 12px;" onclick="deleteGroup('${escHtml(nama)}')">🗑 Buang Kumpulan</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Nama</th><th>Telefon</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${contacts.map((c, i) => {
+              const isBanned = blacklistSet.has(c.telefon);
+              const hasReplied = repliedSet.has(c.telefon);
+              return `
+              <tr class="contact-row" style="${isBanned ? 'opacity:0.5;' : ''}">
+                <td style="color:#94a3b8;font-size:0.8rem;">${i + 1}</td>
+                <td>${escHtml(c.nama)} ${isBanned ? '<span style="color:#ef4444;font-size:0.75rem;">🚫 blacklist</span>' : ''}</td>
+                <td>${escHtml(c.telefon)}</td>
+                <td>
+                  ${hasReplied
+                    ? `<span style="color:#22c55e;font-size:0.78rem;font-weight:600;">💬 Dah Balas</span>`
+                    : `<button style="font-size:0.75rem;padding:3px 8px;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;border-radius:5px;cursor:pointer;" onclick="markReplied('${c.telefon}','${escHtml(c.nama)}')">+ Tandakan Balas</button>`
+                  }
+                </td>
+                <td style="text-align:right;display:flex;gap:6px;justify-content:flex-end;">
+                  ${isBanned
+                    ? `<button class="btn-secondary" style="font-size:0.78rem;padding:5px 10px;" onclick="unblacklist('${c.telefon}')">✅ Unblock</button>`
+                    : `<button style="font-size:0.78rem;padding:5px 10px;background:#ef444422;color:#ef4444;border:1px solid #ef444455;border-radius:6px;cursor:pointer;" onclick="addBlacklist('${c.telefon}','${escHtml(c.nama)}')">🚫 Blacklist</button>`
+                  }
+                  <button class="btn-del" onclick="deleteContact('${c.id}')">🗑</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
   `).join('');
 }
 
@@ -88,7 +302,22 @@ function renderContactSelectList() {
       <input type="checkbox" name="sched-contact-id" value="${c.id}" id="cc_${c.id}" />
       <label for="cc_${c.id}">
         <div class="pick-name">${escHtml(c.nama)}</div>
-        <div class="pick-sub">${escHtml(c.telefon)}</div>
+        <div class="pick-sub">${escHtml(c.telefon)} · ${escHtml(c.kumpulan || 'Umum')}</div>
+      </label>
+    </div>
+  `).join('');
+}
+
+function renderKumpulanSelectList() {
+  const el = document.getElementById('kumpulan-select-list');
+  const groups = Object.keys(getGroups(allContacts));
+  if (!groups.length) { el.innerHTML = '<p class="empty-pick">Tiada kumpulan</p>'; return; }
+  el.innerHTML = groups.map(k => `
+    <div class="pick-item">
+      <input type="checkbox" name="sched-kumpulan" value="${escHtml(k)}" id="kg_${escHtml(k)}" />
+      <label for="kg_${escHtml(k)}">
+        <div class="pick-name">📁 ${escHtml(k)}</div>
+        <div class="pick-sub">${getGroups(allContacts)[k].length} contacts</div>
       </label>
     </div>
   `).join('');
@@ -100,21 +329,95 @@ async function deleteContact(id) {
   showToast('Contact dibuang', 'error');
 }
 
+async function markReplied(telefon, nama) {
+  await fetch('/api/reports/replies/manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ telefon, nama }),
+  });
+  loadContacts();
+  showToast(`💬 ${nama} ditandakan sebagai dah balas`);
+}
+
+async function addBlacklist(telefon, nama) {
+  await fetch('/api/blacklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ telefon, nama }),
+  });
+  loadContacts();
+  showToast(`🚫 ${nama} ditambah ke blacklist`, 'error');
+}
+
+async function unblacklist(telefon) {
+  await fetch(`/api/blacklist/${encodeURIComponent(telefon)}`, { method: 'DELETE' });
+  loadContacts();
+  showToast('✅ Nombor dikeluarkan dari blacklist');
+}
+
+function renderBlacklist() {
+  const el = document.getElementById('blacklist-list');
+  const count = document.getElementById('blacklist-count');
+  count.textContent = allBlacklist.length;
+
+  if (!allBlacklist.length) {
+    el.innerHTML = '<p class="empty-pick">Tiada nombor dalam blacklist</p>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nama</th><th>Telefon</th><th>Tarikh</th><th></th></tr></thead>
+        <tbody>
+          ${allBlacklist.map(b => `
+            <tr class="contact-row">
+              <td>${escHtml(b.nama)}</td>
+              <td>${escHtml(b.telefon)}</td>
+              <td style="color:#94a3b8;font-size:0.8rem;">${new Date(b.addedAt).toLocaleDateString('ms-MY')}</td>
+              <td style="text-align:right;">
+                <button class="btn-secondary" style="font-size:0.75rem;padding:4px 8px;" onclick="unblacklist('${b.telefon}')">✅ Unblock</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function deleteGroup(nama) {
+  if (!confirm(`Pasti nak buang semua contacts dalam kumpulan "${nama}"?`)) return;
+  await fetch(`/api/contacts/group/${encodeURIComponent(nama)}`, { method: 'DELETE' });
+  loadContacts();
+  showToast(`Kumpulan "${nama}" dibuang`, 'error');
+}
+
 document.getElementById('excel-input').addEventListener('change', async (e) => {
   const file = e.target.files[0]; if (!file) return;
   const statusEl = document.getElementById('upload-status');
+  const kumpulan = document.getElementById('kumpulan-name-input').value.trim();
+  if (!kumpulan) {
+    showToast('Sila isi nama kumpulan dahulu', 'error');
+    e.target.value = '';
+    return;
+  }
   statusEl.textContent = 'Memproses...';
-  const fd = new FormData(); fd.append('file', file);
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('kumpulan', kumpulan);
   try {
     const res = await fetch('/api/contacts/upload', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) { statusEl.textContent = '❌ ' + data.error; showToast(data.error, 'error'); }
     else {
-      statusEl.textContent = `✅ ${data.berjaya} berjaya` + (data.gagal ? `, ${data.gagal} gagal` : '');
+      statusEl.textContent = `✅ ${data.berjaya} contacts diimport ke kumpulan "${kumpulan}"` + (data.gagal ? ` (${data.gagal} gagal)` : '');
       showToast(`${data.berjaya} contacts diimport!`);
+      document.getElementById('kumpulan-name-input').value = '';
       allContacts = data.contacts;
-      renderContacts(allContacts);
+      renderContactGroups(allContacts);
       renderContactSelectList();
+      renderKumpulanSelectList();
       updateStats();
     }
   } catch { statusEl.textContent = '❌ Ralat upload'; showToast('Ralat upload', 'error'); }
@@ -122,7 +425,7 @@ document.getElementById('excel-input').addEventListener('change', async (e) => {
 });
 
 document.getElementById('btn-clear-all').addEventListener('click', async () => {
-  if (!confirm('Pasti nak kosongkan semua contacts?')) return;
+  if (!confirm('Pasti nak kosongkan SEMUA contacts?')) return;
   await fetch('/api/contacts', { method: 'DELETE' });
   loadContacts();
   showToast('Semua contacts dibuang', 'error');
@@ -289,24 +592,16 @@ document.querySelectorAll('input[name="sched-mode"]').forEach(r => {
   });
 });
 
-document.querySelectorAll('input[name="sched-type"]').forEach(r => {
-  r.addEventListener('change', () => {
-    const isRecurring = r.value === 'recurring' && r.checked;
-    document.getElementById('one-time-fields').style.display = isRecurring ? 'none' : 'block';
-    document.getElementById('recurring-fields').style.display = isRecurring ? 'flex' : 'none';
-  });
-});
 
-document.getElementById('sched-frequency').addEventListener('change', function () {
-  document.getElementById('weekly-days').style.display = this.value === 'weekly' ? 'block' : 'none';
-  document.getElementById('monthly-day').style.display = this.value === 'monthly' ? 'block' : 'none';
-});
-
-document.querySelectorAll('input[name="sched-contacts"]').forEach(r => {
-  r.addEventListener('change', () => {
-    document.getElementById('contact-select-list').style.display = r.value === 'select' && r.checked ? 'block' : 'none';
-  });
-});
+function toggleKumpulanList(radio) {
+  const el = document.getElementById('kumpulan-select-list');
+  if (radio.value === 'kumpulan') {
+    renderKumpulanSelectList(); // render semula pastikan data terkini
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
 
 // Gap preview (nombor)
 function updateGapPreview() {
@@ -332,19 +627,18 @@ updateTmplGapPreview();
 
 document.getElementById('btn-save-schedule').addEventListener('click', async () => {
   const mode = document.querySelector('input[name="sched-mode"]:checked').value;
-  const type = document.querySelector('input[name="sched-type"]:checked').value;
   const contactsMode = document.querySelector('input[name="sched-contacts"]:checked').value;
   const gapMs = Number(document.getElementById('gap-value').value) * Number(document.getElementById('gap-unit').value);
 
   let contacts = 'all';
-  if (contactsMode === 'select') {
-    const checked = [...document.querySelectorAll('input[name="sched-contact-id"]:checked')].map(el => el.value);
-    if (!checked.length) { showToast('Pilih sekurang-kurangnya satu contact', 'error'); return; }
-    contacts = checked;
+  if (contactsMode === 'kumpulan') {
+    const checked = [...document.querySelectorAll('input[name="sched-kumpulan"]:checked')].map(el => el.value);
+    if (!checked.length) { showToast('Pilih sekurang-kurangnya satu kumpulan', 'error'); return; }
+    contacts = { kumpulan: checked };
   }
 
   const templateGapMs = Number(document.getElementById('tmpl-gap-value').value) * Number(document.getElementById('tmpl-gap-unit').value);
-  const body = { type, contacts, contactGapMs: gapMs, templateGapMs };
+  const body = { type: 'one-time', contacts, contactGapMs: gapMs, templateGapMs };
 
   if (mode === 'rotation') {
     const checked = [...document.querySelectorAll('input[name="rotation-tmpl-id"]:checked')].map(el => el.value);
@@ -361,25 +655,8 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
     body.mediaFile = tmpl.mediaFile || null;
   }
 
-  if (type === 'one-time') {
-    const dt = document.getElementById('sched-datetime').value;
-    if (!dt) { showToast('Sila pilih tarikh & masa', 'error'); return; }
-    body.datetime = dt;
-  } else {
-    const freq = document.getElementById('sched-frequency').value;
-    const time = document.getElementById('sched-time').value;
-    if (!time) { showToast('Sila pilih masa', 'error'); return; }
-    const pattern = { frequency: freq, time };
-    if (freq === 'weekly') {
-      pattern.days = [...document.querySelectorAll('input[name="sched-day"]:checked')].map(el => Number(el.value));
-      if (!pattern.days.length) { showToast('Pilih sekurang-kurangnya satu hari', 'error'); return; }
-    }
-    if (freq === 'monthly') {
-      pattern.dayOfMonth = Number(document.getElementById('sched-day-of-month').value);
-      if (!pattern.dayOfMonth) { showToast('Masukkan tarikh dalam bulan', 'error'); return; }
-    }
-    body.pattern = pattern;
-  }
+  const dtVal = document.getElementById('sched-datetime').value;
+  body.datetime = dtVal ? new Date(dtVal).toISOString() : new Date().toISOString();
 
   try {
     const res = await fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -396,9 +673,9 @@ async function loadSchedules() {
   updateStats();
   if (!list.length) { el.innerHTML = '<p class="empty-pick">Tiada jadual lagi</p>'; return; }
   el.innerHTML = list.map(s => {
-    const when = s.type === 'one-time'
-      ? `Sekali: ${new Date(s.datetime).toLocaleString('ms-MY')}`
-      : `Berulang ${formatPattern(s.pattern)}`;
+    const when = s.datetime
+      ? `Mula: ${new Date(s.datetime).toLocaleString('ms-MY')}`
+      : '—';
     let tmplInfo = s.useRotation
       ? `🔄 Rotation ${s.templateIds?.length || 0} template (seterusnya: ${getRotationNextName(s)})`
       : escHtml((s.template || '').slice(0, 55)) + ((s.template || '').length > 55 ? '...' : '');
@@ -480,16 +757,26 @@ async function loadLogs() {
   const el = document.getElementById('logs-list');
   const dashEl = document.getElementById('dash-logs');
 
-  const render = (items) => items.map(l => `
+  const render = (items) => items.map(l => {
+    const details = l.details || [];
+    const detailsHtml = details.map(d => `
+      <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:0.82rem;">
+        <span>${d.status === 'sent' ? '✅' : '❌'}</span>
+        <span style="color:${d.status === 'sent' ? '#22c55e' : '#ef4444'};font-weight:600;">${escHtml(d.nama)}</span>
+        <span style="color:#64748b;">${escHtml(d.telefon)}</span>
+      </div>
+    `).join('');
+    return `
     <div class="log-entry">
       <div class="log-dot ${l.failed > 0 && !l.sent ? 'failed' : ''}"></div>
-      <div class="log-body">
+      <div class="log-body" style="width:100%;">
         <div class="log-time">${new Date(l.blastAt).toLocaleString('ms-MY')}</div>
         <div class="log-result">✅ ${l.sent} berjaya${l.failed ? ` &nbsp;❌ ${l.failed} gagal` : ''}</div>
-        <div class="log-preview">${escHtml((l.template || '').slice(0, 80))}${(l.template || '').length > 80 ? '...' : ''}</div>
+        ${detailsHtml}
+        <div class="log-preview" style="margin-top:4px;">${escHtml((l.template || '').slice(0, 60))}${(l.template || '').length > 60 ? '...' : ''}</div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   if (!list.length) {
     el.innerHTML = '<p class="empty-pick">Tiada log lagi</p>';
@@ -527,14 +814,143 @@ function formatGap(ms) {
   return (ms / 86400000).toFixed(1) + ' hari';
 }
 
+// ── Laporan ────────────────────────────────────────────
+let salesSelectedContact = { telefon: '', nama: '' };
+
+async function loadLaporan() {
+  const [stats, replies, sales] = await Promise.all([
+    fetch('/api/reports/stats').then(r => r.json()),
+    fetch('/api/reports/replies').then(r => r.json()),
+    fetch('/api/reports/sales').then(r => r.json()),
+  ]);
+  renderLaporanStats(stats);
+  renderReplies(replies);
+  renderSales(sales);
+}
+
+function renderLaporanStats(s) {
+  document.getElementById('rpt-total').textContent = s.total.toLocaleString();
+  document.getElementById('rpt-berjaya').textContent = s.berjaya.toLocaleString();
+  document.getElementById('rpt-pct-berjaya').textContent = s.pctBerjaya + '%';
+  document.getElementById('rpt-failed').textContent = s.failed.toLocaleString();
+  document.getElementById('rpt-pct-failed').textContent = s.pctFailed + '%';
+  document.getElementById('rpt-replied').textContent = s.repliedCount.toLocaleString();
+  document.getElementById('rpt-pct-replied').textContent = s.pctReplied + '%';
+  document.getElementById('rpt-sales-rm').textContent = 'RM ' + parseFloat(s.totalRM).toLocaleString('ms-MY', { minimumFractionDigits: 2 });
+  document.getElementById('rpt-sales-count').textContent = s.salesCount + ' jualan';
+  document.getElementById('rpt-reply-count').textContent = s.repliedCount;
+}
+
+function renderReplies(replies) {
+  const el = document.getElementById('rpt-replies-list');
+  if (!replies.length) {
+    el.innerHTML = '<p class="empty-pick">Tiada balas lagi. Sistem akan detect bila contact reply.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nama</th><th>Telefon</th><th>Balas Pada</th><th></th></tr></thead>
+        <tbody>
+          ${replies.map(r => `
+            <tr class="contact-row">
+              <td>${escHtml(r.nama)}</td>
+              <td>${escHtml(r.telefon)}</td>
+              <td style="color:#94a3b8;font-size:0.8rem;">${new Date(r.repliedAt).toLocaleString('ms-MY')}</td>
+              <td style="text-align:right;">
+                <button class="btn-primary" style="font-size:0.78rem;padding:5px 10px;" onclick="prefillSaleFromReply('${r.telefon}','${escHtml(r.nama)}')">💰 Rekod Jualan</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function prefillSaleFromReply(telefon, nama) {
+  document.getElementById('sales-nama').value = nama + ' (' + telefon + ')';
+  document.getElementById('sales-amount').value = '';
+  document.getElementById('sales-notes').value = '';
+  document.getElementById('sales-amount').focus();
+  document.getElementById('sales-form-section').scrollIntoView({ behavior: 'smooth' });
+  showToast('Form diisi dengan contact ' + nama);
+}
+
+async function addSale() {
+  const nama = document.getElementById('sales-nama').value.trim();
+  const amount = parseFloat(document.getElementById('sales-amount').value);
+  const notes = document.getElementById('sales-notes').value.trim();
+
+  if (!nama) { showToast('Sila masukkan nama pelanggan', 'error'); return; }
+  if (!amount || amount <= 0) { showToast('Sila masukkan jumlah RM yang sah', 'error'); return; }
+
+  await fetch('/api/reports/sales', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nama, amount, notes }),
+  });
+
+  document.getElementById('sales-nama').value = '';
+  document.getElementById('sales-amount').value = '';
+  document.getElementById('sales-notes').value = '';
+  loadLaporan();
+  showToast('💰 Rekod jualan RM ' + amount.toFixed(2) + ' disimpan');
+}
+
+async function deleteSale(id) {
+  await fetch(`/api/reports/sales/${id}`, { method: 'DELETE' });
+  loadLaporan();
+  showToast('Rekod jualan dibuang', 'error');
+}
+
+function renderSales(sales) {
+  const totalEl = document.getElementById('rpt-sales-total');
+  const el = document.getElementById('rpt-sales-list');
+  const total = sales.reduce((s, sale) => s + (sale.amount || 0), 0);
+  totalEl.textContent = 'RM ' + total.toLocaleString('ms-MY', { minimumFractionDigits: 2 });
+
+  if (!sales.length) {
+    el.innerHTML = '<p class="empty-pick">Tiada rekod jualan lagi</p>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nama</th><th>RM</th><th>Nota</th><th>Tarikh</th><th></th></tr></thead>
+        <tbody>
+          ${sales.map(s => `
+            <tr class="contact-row">
+              <td>${escHtml(s.nama)}</td>
+              <td style="color:#a855f7;font-weight:600;">RM ${parseFloat(s.amount).toLocaleString('ms-MY', { minimumFractionDigits: 2 })}</td>
+              <td style="color:#94a3b8;font-size:0.85rem;">${escHtml(s.notes || '—')}</td>
+              <td style="color:#64748b;font-size:0.8rem;">${new Date(s.date).toLocaleDateString('ms-MY')}</td>
+              <td style="text-align:right;"><button class="btn-del" onclick="deleteSale('${s.id}')">🗑</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 // ── Init ───────────────────────────────────────────────
-checkStatus();
-setInterval(checkStatus, 3000);
-loadContacts();
-loadTemplates();
-loadSchedules();
-loadLogs();
-loadQueue();
-setInterval(loadLogs, 10000);
-setInterval(loadQueue, 30000);
-setInterval(loadSchedules, 20000);
+function loadAll() {
+  checkStatus();
+  loadContacts();
+  loadTemplates();
+  loadSchedules();
+  loadLogs();
+  loadQueue();
+}
+
+async function init() {
+  const authed = await checkAuth();
+  if (authed) loadAll();
+  setInterval(checkStatus, 3000);
+  setInterval(loadLogs, 10000);
+  setInterval(loadQueue, 30000);
+  setInterval(loadSchedules, 20000);
+}
+
+init();
