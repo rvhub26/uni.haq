@@ -4,14 +4,26 @@ const { sendMessageDevice, sendMediaDevice, getDeviceStatus } = require('./whats
 const { processTemplate } = require('./templateEngine');
 const { UPLOAD_DIR } = require('./config');
 
-// Kira sendAt untuk satu contact dalam batch mode
-function calcSendAt(now, index, gapMs, batchSize, batchGapMs) {
-  if (batchSize && batchGapMs && batchSize > 0) {
-    const batchIndex = Math.floor(index / batchSize);
-    const posInBatch = index % batchSize;
-    return now + batchIndex * batchGapMs + posInBatch * gapMs;
+// Random gap ±50% dari nilai yang dipilih (nampak macam manusia, bukan bot)
+function randomGap(gapMs) {
+  const min = gapMs * 0.6;
+  const max = gapMs * 1.5;
+  return Math.floor(min + Math.random() * (max - min));
+}
+
+// Bina array cumulative sendAt untuk semua contacts sekaligus
+function buildSendTimes(count, now, gapMs, batchSize, batchGapMs) {
+  const times = [];
+  let t = now;
+  for (let i = 0; i < count; i++) {
+    times.push(t);
+    if (batchSize && batchGapMs && batchSize > 0 && (i + 1) % batchSize === 0) {
+      t += batchGapMs;
+    } else {
+      t += randomGap(gapMs);
+    }
   }
-  return now + index * gapMs;
+  return times;
 }
 
 // Tambah contacts ke queue (single template atau rotation tanpa gap)
@@ -24,6 +36,8 @@ function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, me
     ? contacts.filter(c => !(sentHistory[c.telefon] || []).includes(templateId))
     : contacts;
 
+  const sendTimes = buildSendTimes(eligible.length, now, gapMs, batchSize, batchGapMs);
+
   const newItems = eligible.map((contact, i) => ({
     id: `q_${Date.now()}_${i}`,
     userId,
@@ -34,7 +48,7 @@ function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, me
     templateId: templateId || null,
     templateText,
     mediaFile: mediaFile || null,
-    sendAt: calcSendAt(now, i, gapMs, batchSize, batchGapMs),
+    sendAt: sendTimes[i],
     status: 'pending',
     createdAt: new Date().toISOString(),
   }));
@@ -51,12 +65,14 @@ function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, template
   const now = startAt || Date.now();
   let totalQueued = 0;
 
+  const sendTimes = buildSendTimes(contacts.length, now, contactGapMs, batchSize, batchGapMs);
+
   contacts.forEach((contact, contactIdx) => {
     const alreadySent = sentHistory[contact.telefon] || [];
     const unsentTemplates = templates.filter(t => !alreadySent.includes(t.id));
     if (!unsentTemplates.length) return;
 
-    const baseTime = calcSendAt(now, contactIdx, contactGapMs, batchSize, batchGapMs);
+    const baseTime = sendTimes[contactIdx];
 
     unsentTemplates.forEach((tmpl, tmplIdx) => {
       queue.push({
