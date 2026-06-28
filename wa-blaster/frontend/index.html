@@ -471,14 +471,48 @@
                 <label><input type="radio" name="sched-contacts" value="kumpulan" onchange="toggleKumpulanList(this)" /> Pilih Kumpulan</label>
               </div>
               <div id="kumpulan-select-list" style="display:none;margin-top:10px;" class="pick-list"></div>
-              <!-- Anti-ban: history filter -->
-              <div style="margin-top:12px;padding:10px 14px;background:#22c55e10;border:1px solid #22c55e30;border-radius:8px;display:flex;align-items:center;gap:10px;">
-                <input type="checkbox" id="sched-history-only" style="width:16px;height:16px;cursor:pointer;" />
-                <label for="sched-history-only" style="font-size:0.85rem;color:#94a3b8;cursor:pointer;">
-                  <span style="color:#22c55e;font-weight:600;">✅ Blast kepada yang ada history sahaja</span>
-                  <span style="display:block;font-size:0.75rem;color:#64748b;margin-top:2px;">Lebih selamat — elak ban (hanya hantar ke contacts yang pernah chat dengan nombor ini)</span>
-                </label>
+              <!-- Anti-ban: history filter toggle -->
+              <div style="margin-top:14px;">
+                <div style="font-size:0.8rem;color:#64748b;margin-bottom:8px;font-weight:500;">🛡 Filter Anti-Ban</div>
+                <input type="checkbox" id="history-toggle-cb" style="position:absolute;opacity:0;pointer-events:none;" onchange="onHistoryToggle(this.checked)">
+                <div style="display:flex;gap:8px;">
+                  <label for="history-toggle-cb" id="history-full-lbl" style="flex:1;padding:10px 14px;border-radius:8px;cursor:pointer;border:2px solid #22c55e;background:#22c55e15;display:flex;align-items:center;gap:8px;">
+                    <span id="history-full-dot" style="width:10px;height:10px;border-radius:50%;background:#22c55e;flex-shrink:0;"></span>
+                    <span>
+                      <span style="font-size:0.85rem;font-weight:600;color:#22c55e;">Semua Contacts</span>
+                      <span style="display:block;font-size:0.72rem;color:#64748b;">Blast semua dari Excel</span>
+                    </span>
+                  </label>
+                  <label for="history-toggle-cb" id="history-only-lbl" style="flex:1;padding:10px 14px;border-radius:8px;cursor:pointer;border:2px solid #334155;background:transparent;display:flex;align-items:center;gap:8px;">
+                    <span id="history-only-dot" style="width:10px;height:10px;border-radius:50%;background:#334155;flex-shrink:0;"></span>
+                    <span>
+                      <span style="font-size:0.85rem;font-weight:600;color:#94a3b8;">Ada History Sahaja</span>
+                      <span style="display:block;font-size:0.72rem;color:#64748b;">Lebih selamat, elak ban</span>
+                    </span>
+                  </label>
+                </div>
+                <input type="hidden" id="sched-history-only" value="false" />
               </div>
+              <script>
+              function onHistoryToggle(enabled) {
+                document.getElementById('sched-history-only').value = enabled ? 'true' : 'false';
+                var fl = document.getElementById('history-full-lbl');
+                var ol = document.getElementById('history-only-lbl');
+                var fd = document.getElementById('history-full-dot');
+                var od = document.getElementById('history-only-dot');
+                if (enabled) {
+                  fl.style.border = '2px solid #334155'; fl.style.background = 'transparent';
+                  fd.style.background = '#334155';
+                  ol.style.border = '2px solid #22c55e'; ol.style.background = '#22c55e15';
+                  od.style.background = '#22c55e';
+                } else {
+                  fl.style.border = '2px solid #22c55e'; fl.style.background = '#22c55e15';
+                  fd.style.background = '#22c55e';
+                  ol.style.border = '2px solid #334155'; ol.style.background = 'transparent';
+                  od.style.background = '#334155';
+                }
+              }
+              </script>
             </div>
 
             <!-- Step 4: Gap antara nombor -->

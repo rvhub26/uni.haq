@@ -710,7 +710,7 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
     ? Number(document.getElementById('batch-gap-value').value) * Number(document.getElementById('batch-gap-unit').value)
     : 0;
 
-  const historyOnly = document.getElementById('sched-history-only')?.checked || false;
+  const historyOnly = document.getElementById('sched-history-only')?.value === 'true';
   const body = { type: 'one-time', contacts, contactGapMs: gapMs, templateGapMs, batchSize, batchGapMs, historyOnly };
 
   if (mode === 'rotation') {
