@@ -2,6 +2,7 @@ const router = require('express').Router();
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('../store');
+const { getChatHistory } = require('../whatsapp');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -59,10 +60,20 @@ router.post('/upload', requireDevice, upload.single('file'), (req, res) => {
   res.json({ berjaya: added.length, gagal: failed.length, gagal_senarai: failed, contacts: merged, kumpulan });
 });
 
-// Semua contacts
+// Semua contacts (dengan hasHistory flag)
 router.get('/', requireDevice, (req, res) => {
   const { userId, deviceId } = ctx(req);
-  res.json(readDeviceJSON(userId, deviceId, 'contacts.json'));
+  const contacts = readDeviceJSON(userId, deviceId, 'contacts.json');
+  const historySet = new Set(getChatHistory(userId, deviceId));
+  const result = contacts.map(c => ({ ...c, hasHistory: historySet.has(c.telefon) }));
+  res.json(result);
+});
+
+// Jumlah chat history yang disync
+router.get('/chat-history/count', requireDevice, (req, res) => {
+  const { userId, deviceId } = ctx(req);
+  const history = getChatHistory(userId, deviceId);
+  res.json({ count: history.length });
 });
 
 // Buang satu contact

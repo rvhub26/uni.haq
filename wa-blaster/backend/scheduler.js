@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON, readUserJSON, readJSON } = require('./store');
-const { getDeviceStatus } = require('./whatsapp');
+const { getDeviceStatus, getChatHistory } = require('./whatsapp');
 const { enqueueBlast, enqueueRotationBlast, processQueue } = require('./queue');
 
 const activeJobs = new Map(); // key: scheduleId
@@ -38,7 +38,13 @@ async function runBlast(schedule, userId, deviceId) {
 
   const blacklist = readDeviceJSON(userId, deviceId, 'blacklist.json');
   const blacklistSet = new Set(blacklist.map(b => b.telefon));
-  const targets = deduped.filter(c => !blacklistSet.has(c.telefon));
+  let targets = deduped.filter(c => !blacklistSet.has(c.telefon));
+
+  if (schedule.historyOnly) {
+    const historySet = new Set(getChatHistory(userId, deviceId));
+    targets = targets.filter(c => historySet.has(c.telefon));
+    if (!targets.length) throw new Error('Tiada contacts yang pernah ada history chat dengan nombor ini');
+  }
 
   if (!targets.length) throw new Error('Tiada contacts untuk diblast (semua mungkin dalam blacklist)');
 

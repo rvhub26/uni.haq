@@ -244,14 +244,33 @@ function getGroups(list) {
   return map;
 }
 
+let filterHistoryOnly = false;
+
 function renderContactGroups(list) {
-  document.getElementById('contact-count').textContent = list.length;
+  const displayList = filterHistoryOnly ? list.filter(c => c.hasHistory) : list;
+  const historyCount = list.filter(c => c.hasHistory).length;
+
+  document.getElementById('contact-count').textContent = displayList.length;
+
+  const historyBadge = document.getElementById('history-count-badge');
+  if (historyBadge) historyBadge.textContent = `${historyCount} ada history`;
+
+  const filterBtn = document.getElementById('btn-filter-history');
+  if (filterBtn) {
+    filterBtn.style.background = filterHistoryOnly ? '#22c55e33' : '#1e293b';
+    filterBtn.style.color = filterHistoryOnly ? '#22c55e' : '#94a3b8';
+    filterBtn.style.border = filterHistoryOnly ? '1px solid #22c55e66' : '1px solid #334155';
+    filterBtn.textContent = filterHistoryOnly ? '✅ Ada History Sahaja' : '🔍 Tapis: Ada History';
+  }
+
   const el = document.getElementById('contacts-groups');
-  if (!list.length) {
-    el.innerHTML = '<p class="empty-pick" style="padding:20px 0;">Tiada contacts lagi. Upload Excel untuk mula.</p>';
+  if (!displayList.length) {
+    el.innerHTML = filterHistoryOnly
+      ? '<p class="empty-pick" style="padding:20px 0;">Tiada contacts yang pernah chat dengan nombor ini.</p>'
+      : '<p class="empty-pick" style="padding:20px 0;">Tiada contacts lagi. Upload Excel untuk mula.</p>';
     return;
   }
-  const groups = getGroups(list);
+  const groups = getGroups(displayList);
   const blacklistSet = new Set(allBlacklist.map(b => b.telefon));
   const repliedSet = new Set(allReplies.map(r => r.telefon));
 
@@ -263,7 +282,7 @@ function renderContactGroups(list) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>Nama</th><th>Telefon</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Nama</th><th>Telefon</th><th>History</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${contacts.map((c, i) => {
               const isBanned = blacklistSet.has(c.telefon);
@@ -273,6 +292,10 @@ function renderContactGroups(list) {
                 <td style="color:#94a3b8;font-size:0.8rem;">${i + 1}</td>
                 <td>${escHtml(c.nama)} ${isBanned ? '<span style="color:#ef4444;font-size:0.75rem;">🚫 blacklist</span>' : ''}</td>
                 <td>${escHtml(c.telefon)}</td>
+                <td>${c.hasHistory
+                  ? '<span style="color:#22c55e;font-size:0.8rem;font-weight:600;">✅ Ada</span>'
+                  : '<span style="color:#f59e0b;font-size:0.8rem;">⚠️ Tiada</span>'
+                }</td>
                 <td>
                   ${hasReplied
                     ? `<span style="color:#22c55e;font-size:0.78rem;font-weight:600;">💬 Dah Balas</span>`
@@ -687,7 +710,8 @@ document.getElementById('btn-save-schedule').addEventListener('click', async () 
     ? Number(document.getElementById('batch-gap-value').value) * Number(document.getElementById('batch-gap-unit').value)
     : 0;
 
-  const body = { type: 'one-time', contacts, contactGapMs: gapMs, templateGapMs, batchSize, batchGapMs };
+  const historyOnly = document.getElementById('sched-history-only')?.checked || false;
+  const body = { type: 'one-time', contacts, contactGapMs: gapMs, templateGapMs, batchSize, batchGapMs, historyOnly };
 
   if (mode === 'rotation') {
     const checked = [...document.querySelectorAll('input[name="rotation-tmpl-id"]:checked')].map(el => el.value);
@@ -739,6 +763,7 @@ async function loadSchedules() {
             <span class="sch-chip">⏱ ${formatGap(s.contactGapMs || 4000)}/nombor</span>
             ${s.useRotation && s.templateGapMs ? `<span class="sch-chip">🔁 ${formatGap(s.templateGapMs)}/template</span>` : ''}
             ${s.batchSize ? `<span class="sch-chip" style="background:#22c55e20;color:#22c55e;">🛡 ${s.batchSize}/batch · ${formatGap(s.batchGapMs)}</span>` : ''}
+            ${s.historyOnly ? `<span class="sch-chip" style="background:#3b82f620;color:#60a5fa;">✅ History Sahaja</span>` : ''}
             <span class="sch-status ${s.status}">${s.status === 'active' ? '● Aktif' : '✓ Selesai'}</span>
           </div>
         </div>
@@ -1152,6 +1177,12 @@ init();
   // User modal
   document.getElementById('btn-close-user-mgmt')?.addEventListener('click', closeUserMgmt);
   document.getElementById('btn-add-user')?.addEventListener('click', addUser);
+
+  // Filter history
+  document.getElementById('btn-filter-history')?.addEventListener('click', () => {
+    filterHistoryOnly = !filterHistoryOnly;
+    renderContactGroups(filterContacts(allContacts, document.getElementById('contact-search')?.value || ''));
+  });
 
   // Laporan
   document.getElementById('btn-refresh-laporan')?.addEventListener('click', loadLaporan);

@@ -58,6 +58,18 @@ async function connectDevice(userId, deviceId) {
 
   sock.ev.on('creds.update', saveCreds);
 
+  sock.ev.on('chats.upsert', (chats) => {
+    const existing = readDeviceJSON(userId, deviceId, 'chat_history.json');
+    const existingSet = new Set(existing);
+    for (const chat of chats) {
+      const jid = chat.id;
+      if (!jid?.endsWith('@s.whatsapp.net')) continue;
+      const phone = jid.replace('@s.whatsapp.net', '');
+      existingSet.add(phone);
+    }
+    writeDeviceJSON(userId, deviceId, 'chat_history.json', [...existingSet]);
+  });
+
   sock.ev.on('messages.upsert', ({ messages }) => {
     for (const msg of messages) {
       if (msg.key.fromMe || !msg.message) continue;
@@ -149,6 +161,10 @@ async function sendMediaDevice(userId, deviceId, phone, filePath, caption) {
   }
 }
 
+function getChatHistory(userId, deviceId) {
+  return readDeviceJSON(userId, deviceId, 'chat_history.json');
+}
+
 module.exports = {
   connectDevice,
   disconnectDevice,
@@ -156,4 +172,5 @@ module.exports = {
   getDeviceQR,
   sendMessageDevice,
   sendMediaDevice,
+  getChatHistory,
 };
