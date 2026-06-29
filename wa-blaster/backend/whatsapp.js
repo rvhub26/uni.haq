@@ -41,6 +41,13 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
   }
 
   const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
+
+  // Kalau pairing mode, buang auth lama dulu — mesti fresh start
+  if (pairingPhone) {
+    try { fs.rmSync(authDir, { recursive: true, force: true }); } catch {}
+    conn.pairingMode = true;
+  }
+
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -110,6 +117,7 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
       conn.reconnectAttempts = 0;
       conn.lastActivity = Date.now();
       conn.lastConnectedAt = Date.now();
+      conn.pairingMode = false; // Berjaya sambung — pairing selesai
 
       conn.status = 'connected';
       conn.phoneNumber = sock.user?.id?.split(':')[0] || null;
@@ -133,6 +141,17 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
       const code = lastDisconnect?.error?.output?.statusCode;
       conn.qrBase64 = null;
       if (conn.watchdog) { clearInterval(conn.watchdog); conn.watchdog = null; }
+
+      // Kalau dalam pairing mode (tunggu user masuk kod) dan putus — jangan reconnect
+      // User perlu klik "Jana Kod Baru" untuk cuba semula
+      if (conn.pairingMode) {
+        console.log(`[WA] ${userId}::${deviceId} pairing timeout/gagal (kod: ${code}), tunggu kod baru...`);
+        conn.pairingMode = false;
+        conn.status = 'disconnected';
+        const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
+        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch {}
+        return;
+      }
 
       // Session dah tak valid — buang auth, jangan reconnect, perlu scan QR baru
       const invalidCodes = [DisconnectReason.loggedOut, DisconnectReason.badSession, 403, 405, 401];
