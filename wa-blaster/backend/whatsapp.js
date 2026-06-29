@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const qrcode = require('qrcode');
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const { AUTH_DIR } = require('./config');
 const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('./store');
 
@@ -32,6 +32,9 @@ function getMediaType(filePath) {
 async function connectDevice(userId, deviceId) {
   const conn = getConn(userId, deviceId);
 
+  // Bersihkan watchdog lama kalau ada
+  if (conn.watchdog) { clearInterval(conn.watchdog); conn.watchdog = null; }
+
   if (conn.sock) {
     try { conn.sock.end(undefined); } catch {}
     conn.sock = null;
@@ -47,18 +50,22 @@ async function connectDevice(userId, deviceId) {
     version,
     auth: state,
     printQRInTerminal: false,
-    keepAliveIntervalMs: 15000,
+    keepAliveIntervalMs: 30000,
     connectTimeoutMs: 60000,
-    retryRequestDelayMs: 2000,
+    retryRequestDelayMs: 3000,
     defaultQueryTimeoutMs: 60000,
     generateHighQualityLinkPreview: false,
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
   });
 
   conn.sock = sock;
+  conn.lastActivity = Date.now();
 
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('chats.upsert', (chats) => {
+    conn.lastActivity = Date.now();
     const existing = readDeviceJSON(userId, deviceId, 'chat_history.json');
     const existingSet = new Set(existing);
     for (const chat of chats) {
@@ -71,6 +78,7 @@ async function connectDevice(userId, deviceId) {
   });
 
   sock.ev.on('messages.upsert', ({ messages }) => {
+    conn.lastActivity = Date.now();
     for (const msg of messages) {
       if (msg.key.fromMe || !msg.message) continue;
       const jid = msg.key.remoteJid;
@@ -100,31 +108,63 @@ async function connectDevice(userId, deviceId) {
       conn.status = 'connected';
       conn.qrBase64 = null;
       conn.reconnectAttempts = 0;
+      conn.lastActivity = Date.now();
       console.log(`[WA] ${userId}::${deviceId} berjaya disambung`);
+
+      // Watchdog — semak setiap 2 minit, reconnect kalau nampak stuck
+      if (conn.watchdog) clearInterval(conn.watchdog);
+      conn.watchdog = setInterval(() => {
+        const idle = Date.now() - (conn.lastActivity || 0);
+        if (conn.status === 'connected' && idle > 5 * 60 * 1000) {
+          console.log(`[WA] ${userId}::${deviceId} watchdog: idle ${Math.round(idle/1000)}s, reconnect...`);
+          connectDevice(userId, deviceId);
+        }
+      }, 2 * 60 * 1000);
     }
 
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
       conn.qrBase64 = null;
+      if (conn.watchdog) { clearInterval(conn.watchdog); conn.watchdog = null; }
 
+      // Jangan reconnect kalau sengaja log keluar atau connection diganti peranti lain
       if (code === DisconnectReason.loggedOut) {
         conn.status = 'disconnected';
         console.log(`[WA] ${userId}::${deviceId} dilog keluar`);
         return;
       }
+      if (code === DisconnectReason.connectionReplaced) {
+        conn.status = 'disconnected';
+        console.log(`[WA] ${userId}::${deviceId} connection diganti peranti lain`);
+        return;
+      }
 
-      conn.reconnectAttempts++;
-      const delay = Math.min(3000 * conn.reconnectAttempts, 30000);
+      // Bad session — perlu scan QR semula, buang auth lama
+      if (code === DisconnectReason.badSession) {
+        console.log(`[WA] ${userId}::${deviceId} bad session, buang auth...`);
+        const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
+        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch {}
+        conn.status = 'disconnected';
+        return;
+      }
+
+      // Reconnect dengan exponential backoff + jitter
+      conn.reconnectAttempts = (conn.reconnectAttempts || 0) + 1;
+      const base = Math.min(5000 * conn.reconnectAttempts, 60000);
+      const jitter = Math.floor(Math.random() * 3000);
+      const delay = base + jitter;
       conn.status = 'connecting';
-      console.log(`[WA] ${userId}::${deviceId} reconnect dalam ${delay / 1000}s...`);
+      console.log(`[WA] ${userId}::${deviceId} reconnect dalam ${Math.round(delay/1000)}s (cuba ke-${conn.reconnectAttempts}, kod: ${code})...`);
       setTimeout(() => connectDevice(userId, deviceId), delay);
     }
   });
+
 }
 
 async function disconnectDevice(userId, deviceId) {
   const k = connKey(userId, deviceId);
   const conn = conns.get(k);
+  if (conn?.watchdog) { clearInterval(conn.watchdog); }
   if (conn?.sock) {
     try { conn.sock.end(undefined); } catch {}
   }
