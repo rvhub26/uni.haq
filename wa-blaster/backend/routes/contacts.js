@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const multer = require('multer');
 const XLSX = require('xlsx');
-const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('../store');
+const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON, readUserJSON } = require('../store');
 const { getChatHistory } = require('../whatsapp');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -18,7 +18,15 @@ function formatPhone(raw) {
 }
 
 function requireDevice(req, res, next) {
-  if (!req.session.deviceId) return res.status(400).json({ error: 'Pilih peranti WhatsApp dahulu' });
+  if (!req.session.deviceId) {
+    // Auto-pilih device pertama kalau ada
+    const devices = readUserJSON(req.session.userId, 'devices.json');
+    if (!devices || !devices.length) {
+      return res.status(400).json({ error: 'Tambah peranti WhatsApp dahulu di tab Peranti' });
+    }
+    req.session.deviceId = devices[0].id;
+    return req.session.save(() => next());
+  }
   next();
 }
 
