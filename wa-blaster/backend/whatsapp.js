@@ -108,34 +108,21 @@ async function connectDevice(userId, deviceId) {
       conn.qrBase64 = null;
       conn.reconnectAttempts = 0;
       conn.lastActivity = Date.now();
+      conn.lastConnectedAt = Date.now();
 
-      // Verify bukan ghost connection — sock.user mesti ada
-      setTimeout(() => {
-        if (!sock.user) {
-          console.log(`[WA] ${userId}::${deviceId} ghost connection — sock.user kosong, reconnect...`);
-          conn.status = 'disconnected';
+      conn.status = 'connected';
+      conn.phoneNumber = sock.user?.id?.split(':')[0] || null;
+      console.log(`[WA] ${userId}::${deviceId} berjaya disambung (${conn.phoneNumber || 'unknown'})`);
+
+      // Watchdog — semak setiap 2 minit
+      if (conn.watchdog) clearInterval(conn.watchdog);
+      conn.watchdog = setInterval(() => {
+        const idle = Date.now() - (conn.lastActivity || 0);
+        if (conn.status === 'connected' && idle > 5 * 60 * 1000) {
+          console.log(`[WA] ${userId}::${deviceId} watchdog: idle ${Math.round(idle/1000)}s, reconnect...`);
           connectDevice(userId, deviceId);
-          return;
         }
-        conn.status = 'connected';
-        conn.phoneNumber = sock.user.id?.split(':')[0] || null;
-        console.log(`[WA] ${userId}::${deviceId} berjaya disambung (${conn.phoneNumber})`);
-
-        // Watchdog — semak setiap 2 minit, reconnect kalau stuck
-        if (conn.watchdog) clearInterval(conn.watchdog);
-        conn.watchdog = setInterval(() => {
-          if (conn.status === 'connected' && !sock.user) {
-            console.log(`[WA] ${userId}::${deviceId} watchdog: ghost detected, reconnect...`);
-            connectDevice(userId, deviceId);
-            return;
-          }
-          const idle = Date.now() - (conn.lastActivity || 0);
-          if (conn.status === 'connected' && idle > 5 * 60 * 1000) {
-            console.log(`[WA] ${userId}::${deviceId} watchdog: idle ${Math.round(idle/1000)}s, reconnect...`);
-            connectDevice(userId, deviceId);
-          }
-        }, 2 * 60 * 1000);
-      }, 3000);
+      }, 2 * 60 * 1000);
     }
 
     if (connection === 'close') {
@@ -143,25 +130,40 @@ async function connectDevice(userId, deviceId) {
       conn.qrBase64 = null;
       if (conn.watchdog) { clearInterval(conn.watchdog); conn.watchdog = null; }
 
-      // Jangan reconnect kalau sengaja log keluar atau connection diganti peranti lain
-      if (code === DisconnectReason.loggedOut) {
+      // Session dah tak valid — buang auth, jangan reconnect, perlu scan QR baru
+      const invalidCodes = [DisconnectReason.loggedOut, DisconnectReason.badSession, 403, 405, 401];
+      if (invalidCodes.includes(code)) {
+        console.log(`[WA] ${userId}::${deviceId} session tak valid (kod: ${code}), buang auth...`);
+        const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
+        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch {}
         conn.status = 'disconnected';
-        console.log(`[WA] ${userId}::${deviceId} dilog keluar`);
+        conn.phoneNumber = null;
         return;
       }
+
+      // Connection diganti peranti lain — jangan reconnect
       if (code === DisconnectReason.connectionReplaced) {
         conn.status = 'disconnected';
         console.log(`[WA] ${userId}::${deviceId} connection diganti peranti lain`);
         return;
       }
 
-      // Bad session — perlu scan QR semula, buang auth lama
-      if (code === DisconnectReason.badSession) {
-        console.log(`[WA] ${userId}::${deviceId} bad session, buang auth...`);
-        const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
-        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch {}
-        conn.status = 'disconnected';
-        return;
+      // Rapid fail detection — connect then putus dalam <30s berturut-turut = session stale
+      const connectedDuration = conn.lastConnectedAt ? Date.now() - conn.lastConnectedAt : null;
+      if (connectedDuration !== null && connectedDuration < 30000) {
+        conn.rapidFailCount = (conn.rapidFailCount || 0) + 1;
+        console.log(`[WA] ${userId}::${deviceId} rapid fail #${conn.rapidFailCount} (connected ${Math.round(connectedDuration/1000)}s)`);
+        if (conn.rapidFailCount >= 3) {
+          console.log(`[WA] ${userId}::${deviceId} session stale — buang auth, perlu scan QR baru`);
+          const authDir = path.join(__dirname, AUTH_DIR, userId, deviceId);
+          try { fs.rmSync(authDir, { recursive: true, force: true }); } catch {}
+          conn.status = 'disconnected';
+          conn.rapidFailCount = 0;
+          conn.phoneNumber = null;
+          return;
+        }
+      } else {
+        conn.rapidFailCount = 0;
       }
 
       // Reconnect dengan exponential backoff + jitter
