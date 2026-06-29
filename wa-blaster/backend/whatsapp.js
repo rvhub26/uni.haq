@@ -105,21 +105,37 @@ async function connectDevice(userId, deviceId) {
     }
 
     if (connection === 'open') {
-      conn.status = 'connected';
       conn.qrBase64 = null;
       conn.reconnectAttempts = 0;
       conn.lastActivity = Date.now();
-      console.log(`[WA] ${userId}::${deviceId} berjaya disambung`);
 
-      // Watchdog — semak setiap 2 minit, reconnect kalau nampak stuck
-      if (conn.watchdog) clearInterval(conn.watchdog);
-      conn.watchdog = setInterval(() => {
-        const idle = Date.now() - (conn.lastActivity || 0);
-        if (conn.status === 'connected' && idle > 5 * 60 * 1000) {
-          console.log(`[WA] ${userId}::${deviceId} watchdog: idle ${Math.round(idle/1000)}s, reconnect...`);
+      // Verify bukan ghost connection — sock.user mesti ada
+      setTimeout(() => {
+        if (!sock.user) {
+          console.log(`[WA] ${userId}::${deviceId} ghost connection — sock.user kosong, reconnect...`);
+          conn.status = 'disconnected';
           connectDevice(userId, deviceId);
+          return;
         }
-      }, 2 * 60 * 1000);
+        conn.status = 'connected';
+        conn.phoneNumber = sock.user.id?.split(':')[0] || null;
+        console.log(`[WA] ${userId}::${deviceId} berjaya disambung (${conn.phoneNumber})`);
+
+        // Watchdog — semak setiap 2 minit, reconnect kalau stuck
+        if (conn.watchdog) clearInterval(conn.watchdog);
+        conn.watchdog = setInterval(() => {
+          if (conn.status === 'connected' && !sock.user) {
+            console.log(`[WA] ${userId}::${deviceId} watchdog: ghost detected, reconnect...`);
+            connectDevice(userId, deviceId);
+            return;
+          }
+          const idle = Date.now() - (conn.lastActivity || 0);
+          if (conn.status === 'connected' && idle > 5 * 60 * 1000) {
+            console.log(`[WA] ${userId}::${deviceId} watchdog: idle ${Math.round(idle/1000)}s, reconnect...`);
+            connectDevice(userId, deviceId);
+          }
+        }, 2 * 60 * 1000);
+      }, 3000);
     }
 
     if (connection === 'close') {
@@ -175,7 +191,10 @@ async function disconnectDevice(userId, deviceId) {
 
 function getDeviceStatus(userId, deviceId) {
   const conn = getConn(userId, deviceId);
-  return { connected: conn.status === 'connected', status: conn.status };
+  // Ghost connection check — connected tapi sock.user tiada = fake connection
+  const isGhost = conn.status === 'connected' && conn.sock && !conn.sock.user;
+  const status = isGhost ? 'disconnected' : conn.status;
+  return { connected: status === 'connected', status, phoneNumber: conn.phoneNumber || null };
 }
 
 function getDeviceQR(userId, deviceId) {
