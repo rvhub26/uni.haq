@@ -114,15 +114,18 @@ async function connectDevice(userId, deviceId) {
       conn.phoneNumber = sock.user?.id?.split(':')[0] || null;
       console.log(`[WA] ${userId}::${deviceId} berjaya disambung (${conn.phoneNumber || 'unknown'})`);
 
-      // Watchdog — semak setiap 2 minit
+      // Keepalive — hantar presence setiap 3 minit supaya session tak idle
       if (conn.watchdog) clearInterval(conn.watchdog);
-      conn.watchdog = setInterval(() => {
-        const idle = Date.now() - (conn.lastActivity || 0);
-        if (conn.status === 'connected' && idle > 5 * 60 * 1000) {
-          console.log(`[WA] ${userId}::${deviceId} watchdog: idle ${Math.round(idle/1000)}s, reconnect...`);
+      conn.watchdog = setInterval(async () => {
+        if (conn.status !== 'connected' || !conn.sock) return;
+        try {
+          await conn.sock.sendPresenceUpdate('available');
+          conn.lastActivity = Date.now();
+        } catch (e) {
+          console.log(`[WA] ${userId}::${deviceId} keepalive gagal: ${e.message}, reconnect...`);
           connectDevice(userId, deviceId);
         }
-      }, 2 * 60 * 1000);
+      }, 3 * 60 * 1000);
     }
 
     if (connection === 'close') {
