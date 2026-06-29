@@ -2,6 +2,10 @@ const router = require('express').Router();
 const { readUserJSON, writeUserJSON, deleteDeviceDir } = require('../store');
 const { connectDevice, disconnectDevice, getDeviceStatus, getDeviceQR } = require('../whatsapp');
 
+async function connectWithPairingCode(userId, deviceId, phone) {
+  return connectDevice(userId, deviceId, phone);
+}
+
 const MAX_DEVICES = 10;
 
 function getUserDevices(userId) { return readUserJSON(userId, 'devices.json'); }
@@ -82,6 +86,32 @@ router.post('/:deviceId/connect', async (req, res) => {
 
   connectDevice(userId, deviceId).catch(() => {});
   res.json({ ok: true });
+});
+
+// POST /api/devices/:deviceId/pair — sambung via pairing code (tanpa scan QR)
+router.post('/:deviceId/pair', async (req, res) => {
+  const userId = req.session.userId;
+  const { deviceId } = req.params;
+  const { phone } = req.body;
+
+  if (!phone || !/^\d{10,15}$/.test(phone.replace(/\D/g, ''))) {
+    return res.status(400).json({ error: 'Nombor telefon tidak sah. Contoh: 601234567890' });
+  }
+
+  const devices = getUserDevices(userId);
+  if (!devices.find(d => d.id === deviceId)) {
+    return res.status(404).json({ error: 'Peranti tidak dijumpai' });
+  }
+
+  try {
+    const code = await connectWithPairingCode(userId, deviceId, phone);
+    if (!code) {
+      return res.json({ ok: true, message: 'Peranti sudah berdaftar, sambungan biasa dimulakan' });
+    }
+    res.json({ ok: true, code });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET /api/devices/:deviceId/status — status + QR untuk satu device

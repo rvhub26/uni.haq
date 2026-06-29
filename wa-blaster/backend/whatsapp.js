@@ -29,7 +29,7 @@ function getMediaType(filePath) {
   return null;
 }
 
-async function connectDevice(userId, deviceId) {
+async function connectDevice(userId, deviceId, pairingPhone = null) {
   const conn = getConn(userId, deviceId);
 
   // Bersihkan watchdog lama kalau ada
@@ -45,6 +45,7 @@ async function connectDevice(userId, deviceId) {
 
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
   const { version } = await fetchLatestBaileysVersion();
+  const usePairing = pairingPhone && !state.creds.registered;
 
   const sock = makeWASocket({
     version,
@@ -180,6 +181,20 @@ async function connectDevice(userId, deviceId) {
     }
   });
 
+  // Pairing code mode — tunggu socket ready, request kod
+  if (usePairing) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const cleanPhone = pairingPhone.replace(/\D/g, '');
+      const code = await sock.requestPairingCode(cleanPhone);
+      conn.pairingCode = code;
+      console.log(`[WA] ${userId}::${deviceId} pairing code: ${code}`);
+      return code;
+    } catch (e) {
+      console.log(`[WA] ${userId}::${deviceId} pairing code error: ${e.message}`);
+      throw new Error(`Gagal dapatkan pairing code: ${e.message}`);
+    }
+  }
 }
 
 async function disconnectDevice(userId, deviceId) {
