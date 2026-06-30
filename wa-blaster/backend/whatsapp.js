@@ -54,6 +54,9 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
   const { version } = await fetchLatestBaileysVersion();
   const usePairing = pairingPhone && !state.creds.registered;
 
+  // Track sama ada device dah registered (ada credentials) atau baru
+  conn.isRegistered = !!state.creds.registered;
+
   const sock = makeWASocket({
     version,
     auth: state,
@@ -70,7 +73,7 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
   conn.sock = sock;
   conn.lastActivity = Date.now();
 
-  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('creds.update', () => { saveCreds(); conn.isRegistered = true; });
 
   sock.ev.on('chats.upsert', (chats) => {
     conn.lastActivity = Date.now();
@@ -168,6 +171,13 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
       if (code === DisconnectReason.connectionReplaced) {
         conn.status = 'disconnected';
         console.log(`[WA] ${userId}::${deviceId} connection diganti peranti lain`);
+        return;
+      }
+
+      // QR timeout (408) + belum registered = tiada siapa scan QR, jangan loop
+      if (code === 408 && !conn.isRegistered) {
+        console.log(`[WA] ${userId}::${deviceId} QR timeout, tiada credentials — stop reconnect, tunggu user`);
+        conn.status = 'disconnected';
         return;
       }
 
