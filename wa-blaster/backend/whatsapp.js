@@ -48,6 +48,16 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
     conn.pairingMode = true;
   }
 
+  // Kalau tiada credentials DAN bukan pairing mode — jangan connect, tunggu user
+  if (!pairingPhone) {
+    const credsPath = path.join(authDir, 'creds.json');
+    if (!fs.existsSync(credsPath)) {
+      conn.status = 'disconnected';
+      console.log(`[WA] ${userId}::${deviceId} tiada credentials — skip autoconnect`);
+      return;
+    }
+  }
+
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
