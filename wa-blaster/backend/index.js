@@ -9,6 +9,9 @@ const { readJSON, readUserJSON } = require('./store');
 const app = express();
 app.use(express.json());
 
+// Webhook Meta — mesti sebelum auth middleware
+app.use('/api/webhook/whatsapp', require('./routes/webhook'));
+
 app.use(session({
   secret: 'unihaq-secret-key-2026',
   resave: false,
