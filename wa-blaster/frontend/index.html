@@ -756,10 +756,29 @@
         <div class="card-header" style="margin-bottom:16px;">
           <h2>Tambah Nombor Baru</h2>
         </div>
-        <form id="add-device-form" onsubmit="_addDeviceSubmit(event); return false;" style="display:flex;gap:10px;margin-bottom:20px;">
-          <input type="text" id="new-device-name-inline" class="input-field" placeholder="Nama peranti cth: Nombor Utama, Nombor Sales..." style="flex:1;" />
-          <input type="submit" class="btn-primary" style="white-space:nowrap;border:none;cursor:pointer;" value="+ Tambah" />
-        </form>
+        <!-- Tab pilihan jenis peranti -->
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button id="tab-baileys" onclick="_switchDeviceTab('baileys')" style="flex:1;padding:8px;border-radius:8px;border:1px solid #22c55e;background:#22c55e22;color:#22c55e;cursor:pointer;font-size:0.85rem;font-weight:600;">📱 WhatsApp Biasa</button>
+          <button id="tab-meta" onclick="_switchDeviceTab('meta')" style="flex:1;padding:8px;border-radius:8px;border:1px solid #33415588;background:transparent;color:#64748b;cursor:pointer;font-size:0.85rem;font-weight:600;">☁️ Meta Official API</button>
+        </div>
+        <!-- Form WhatsApp Biasa (Baileys) -->
+        <div id="form-baileys">
+          <form id="add-device-form" onsubmit="_addDeviceSubmit(event); return false;" style="display:flex;gap:10px;margin-bottom:8px;">
+            <input type="text" id="new-device-name-inline" class="input-field" placeholder="Nama peranti cth: Nombor Utama, Nombor Sales..." style="flex:1;" />
+            <input type="submit" class="btn-primary" style="white-space:nowrap;border:none;cursor:pointer;" value="+ Tambah" />
+          </form>
+          <p style="font-size:0.78rem;color:#64748b;margin-bottom:16px;">Guna pairing code atau scan QR. Sesuai untuk nombor peribadi/tidak rasmi.</p>
+        </div>
+        <!-- Form Meta Official API -->
+        <div id="form-meta" style="display:none;">
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px;">
+            <input type="text" id="meta-device-name" class="input-field" placeholder="Nama peranti cth: Nombor Bisnes 1" />
+            <input type="text" id="meta-phone-number-id" class="input-field" placeholder="Phone Number ID (dari Meta Developer)" />
+            <input type="text" id="meta-access-token" class="input-field" placeholder="Access Token (Permanent Token)" />
+            <button onclick="_addMetaDevice()" class="btn-primary" style="border:none;cursor:pointer;width:100%;">+ Sambung Meta API</button>
+          </div>
+          <p style="font-size:0.78rem;color:#64748b;margin-bottom:16px;">Guna token dari Meta Business Manager. Stabil, tiada QR, tiada disconnect.</p>
+        </div>
         <div id="peranti-list" style="display:flex;flex-direction:column;gap:12px;">
           <p class="empty-pick">Tiada peranti. Tambah nombor untuk mula.</p>
         </div>
@@ -802,6 +821,33 @@
       </div>
     </div>
     <script>
+    function _switchDeviceTab(tab) {
+      var isMeta = tab === 'meta';
+      document.getElementById('form-baileys').style.display = isMeta ? 'none' : 'block';
+      document.getElementById('form-meta').style.display = isMeta ? 'block' : 'none';
+      document.getElementById('tab-baileys').style.cssText = 'flex:1;padding:8px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;border:1px solid ' + (!isMeta ? '#22c55e;background:#22c55e22;color:#22c55e;' : '#33415588;background:transparent;color:#64748b;');
+      document.getElementById('tab-meta').style.cssText = 'flex:1;padding:8px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;border:1px solid ' + (isMeta ? '#3b82f6;background:#3b82f622;color:#3b82f6;' : '#33415588;background:transparent;color:#64748b;');
+    }
+
+    function _addMetaDevice() {
+      var name = document.getElementById('meta-device-name').value.trim();
+      var phoneNumberId = document.getElementById('meta-phone-number-id').value.trim();
+      var accessToken = document.getElementById('meta-access-token').value.trim();
+      if (!phoneNumberId || !accessToken) { alert('Masukkan Phone Number ID dan Access Token'); return; }
+      fetch('/api/devices/meta', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name: name || 'Meta API', phoneNumberId: phoneNumberId, accessToken: accessToken })
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.error) { alert('Ralat: ' + data.error); return; }
+        document.getElementById('meta-device-name').value = '';
+        document.getElementById('meta-phone-number-id').value = '';
+        document.getElementById('meta-access-token').value = '';
+        _loadPerantiList();
+        alert('✅ Meta API berjaya disambung! Nombor: ' + (data.displayPhone || data.phoneNumber || 'OK'));
+      }).catch(function(){ alert('Ralat sambung Meta API'); });
+    }
+
     function _addDeviceSubmit(e) {
       if (e && e.preventDefault) e.preventDefault();
       var name = document.getElementById('new-device-name-inline').value.trim();
@@ -829,16 +875,21 @@
         }
         el.innerHTML = devices.map(function(d) {
           var dot = d.connected ? '#22c55e' : (d.status === 'connecting' ? '#f59e0b' : '#ef4444');
-          var statusTxt = d.connected ? 'Bersambung' : (d.status === 'qr' ? 'Tunggu Scan QR' : (d.status === 'connecting' ? 'Menyambung...' : 'Tidak Bersambung'));
+          var isMeta = d.type === 'meta';
+          var badge = isMeta ? '<span style="font-size:0.68rem;background:#3b82f622;color:#3b82f6;padding:2px 7px;border-radius:10px;margin-left:6px;border:1px solid #3b82f644;">Meta API</span>' : '';
+          var statusTxt = d.connected ? (isMeta ? 'Bersambung (' + (d.phoneNumber||d.verifiedName||'Meta') + ')' : 'Bersambung') : (d.status === 'qr' ? 'Tunggu Scan QR' : (d.status === 'connecting' ? 'Menyambung...' : 'Tidak Bersambung'));
+          var actionBtns = isMeta
+            ? ''
+            : (!d.connected ? '<a href="#" style="font-size:0.8rem;color:#22c55e;text-decoration:none;padding:5px 10px;border:1px solid #22c55e44;border-radius:6px;margin-right:4px;" data-devid="'+d.id+'" class="btn-show-pair">🔢 Kod</a>' : '')
+              + (!d.connected ? '<a href="#" style="font-size:0.8rem;color:#64748b;text-decoration:none;padding:5px 10px;border:1px solid #33415544;border-radius:6px;" data-devid="'+d.id+'" class="btn-show-qr">📷 QR</a>' : '');
           return '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:10px;">'
             + '<span style="width:10px;height:10px;border-radius:50%;background:'+dot+';flex-shrink:0;"></span>'
             + '<div style="flex:1;">'
-            + '<div style="font-weight:600;color:#f1f5f9;">'+d.name+'</div>'
+            + '<div style="font-weight:600;color:#f1f5f9;">'+d.name+badge+'</div>'
             + '<div style="font-size:0.78rem;color:#64748b;">'+statusTxt+'</div>'
             + '</div>'
             + '<div style="display:flex;gap:8px;align-items:center;">'
-            + (!d.connected ? '<a href="#" style="font-size:0.8rem;color:#22c55e;text-decoration:none;padding:5px 10px;border:1px solid #22c55e44;border-radius:6px;margin-right:4px;" data-devid="'+d.id+'" class="btn-show-pair">🔢 Kod</a>' : '')
-            + (!d.connected ? '<a href="#" style="font-size:0.8rem;color:#64748b;text-decoration:none;padding:5px 10px;border:1px solid #33415544;border-radius:6px;" data-devid="'+d.id+'" class="btn-show-qr">📷 QR</a>' : '')
+            + actionBtns
             + '<a href="#" style="font-size:0.8rem;color:#ef4444;text-decoration:none;padding:5px 10px;border:1px solid #ef444444;border-radius:6px;" data-devid="'+d.id+'" data-devname="'+d.name+'" class="btn-del-device">🗑 Buang</a>'
             + '</div>'
             + '</div>';

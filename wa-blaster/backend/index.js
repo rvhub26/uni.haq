@@ -3,6 +3,7 @@ const path = require('path');
 const session = require('express-session');
 const { PORT } = require('./config');
 const { connectDevice } = require('./whatsapp');
+const { loadMetaDevice } = require('./meta-api');
 const { restoreAllJobs } = require('./scheduler');
 const { readJSON, readUserJSON } = require('./store');
 
@@ -65,9 +66,13 @@ async function connectAllDevices() {
   for (const user of users) {
     const devices = readUserJSON(user.id, 'devices.json');
     for (const device of devices) {
-      await connectDevice(user.id, device.id).catch(e => {
-        console.error(`Gagal connect ${user.id}::${device.id}:`, e.message);
-      });
+      if (device.type === 'meta') {
+        loadMetaDevice(user.id, device.id);
+      } else {
+        await connectDevice(user.id, device.id).catch(e => {
+          console.error(`Gagal connect ${user.id}::${device.id}:`, e.message);
+        });
+      }
     }
   }
   console.log(`${users.reduce((t, u) => t + readUserJSON(u.id, 'devices.json').length, 0)} device(s) dimulakan`);

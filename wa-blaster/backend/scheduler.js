@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON, readUserJSON, readJSON } = require('./store');
 const { getDeviceStatus, getChatHistory } = require('./whatsapp');
+const { getMetaDeviceStatus } = require('./meta-api');
 const { enqueueBlast, enqueueRotationBlast, processQueue } = require('./queue');
 
 const activeJobs = new Map(); // key: scheduleId
@@ -21,8 +22,15 @@ function resolveTemplate(schedule, userId, deviceId) {
   return { templateId: null, templateText: schedule.template, mediaFile: schedule.mediaFile || null };
 }
 
+function isConnected(userId, deviceId) {
+  const devices = readUserJSON(userId, 'devices.json');
+  const device = devices.find(d => d.id === deviceId);
+  if (device?.type === 'meta') return getMetaDeviceStatus(userId, deviceId).connected;
+  return getDeviceStatus(userId, deviceId).connected;
+}
+
 async function runBlast(schedule, userId, deviceId) {
-  if (!getDeviceStatus(userId, deviceId).connected) throw new Error('WhatsApp tidak bersambung');
+  if (!isConnected(userId, deviceId)) throw new Error('WhatsApp tidak bersambung');
 
   const allContacts = readDeviceJSON(userId, deviceId, 'contacts.json');
   const raw = schedule.contacts === 'all'

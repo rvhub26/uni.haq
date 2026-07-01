@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { readUserJSON, writeUserJSON, deleteDeviceDir } = require('../store');
 const { connectDevice, disconnectDevice, getDeviceStatus, getDeviceQR } = require('../whatsapp');
+const { setupMetaDevice, getMetaDeviceStatus, disconnectMetaDevice } = require('../meta-api');
 
 async function connectWithPairingCode(userId, deviceId, phone) {
   return connectDevice(userId, deviceId, phone);
@@ -15,12 +16,12 @@ function saveUserDevices(userId, devices) { writeUserJSON(userId, 'devices.json'
 router.get('/', (req, res) => {
   const userId = req.session.userId;
   const devices = getUserDevices(userId);
-  const result = devices.map(d => ({
-    ...d,
-    ...getDeviceStatus(userId, d.id),
-    qr: getDeviceQR(userId, d.id),
-    isCurrent: req.session.deviceId === d.id,
-  }));
+  const result = devices.map(d => {
+    const status = d.type === 'meta'
+      ? getMetaDeviceStatus(userId, d.id)
+      : { ...getDeviceStatus(userId, d.id), qr: getDeviceQR(userId, d.id) };
+    return { ...d, ...status, isCurrent: req.session.deviceId === d.id };
+  });
   res.json(result);
 });
 
@@ -138,6 +139,45 @@ router.put('/:deviceId', (req, res) => {
   res.json(dev);
 });
 
+// POST /api/devices/meta — tambah peranti Meta API
+router.post('/meta', async (req, res) => {
+  const userId = req.session.userId;
+  const devices = getUserDevices(userId);
+
+  if (devices.length >= MAX_DEVICES) {
+    return res.status(400).json({ error: `Had maksimum ${MAX_DEVICES} peranti` });
+  }
+
+  const { name, phoneNumberId, accessToken } = req.body;
+  if (!phoneNumberId || !accessToken) {
+    return res.status(400).json({ error: 'Phone Number ID dan Access Token diperlukan' });
+  }
+
+  const deviceId = `dev_${Date.now()}`;
+  const deviceName = (name || `Meta API ${devices.length + 1}`).trim();
+
+  try {
+    const info = await setupMetaDevice(userId, deviceId, phoneNumberId, accessToken);
+    const newDevice = {
+      id: deviceId,
+      name: deviceName,
+      type: 'meta',
+      createdAt: new Date().toISOString(),
+    };
+    devices.push(newDevice);
+    saveUserDevices(userId, devices);
+
+    if (devices.length === 1 || !req.session.deviceId) {
+      req.session.deviceId = deviceId;
+      await new Promise(r => req.session.save(r));
+    }
+
+    res.json({ ...newDevice, ...getMetaDeviceStatus(userId, deviceId), isCurrent: req.session.deviceId === deviceId, displayPhone: info.displayPhone, verifiedName: info.verifiedName });
+  } catch (e) {
+    res.status(400).json({ error: `Gagal verify credentials: ${e.message}` });
+  }
+});
+
 // DELETE /api/devices/:deviceId — buang device
 router.delete('/:deviceId', async (req, res) => {
   const userId = req.session.userId;
@@ -147,8 +187,14 @@ router.delete('/:deviceId', async (req, res) => {
 
   if (idx < 0) return res.status(404).json({ error: 'Peranti tidak dijumpai' });
 
-  // Disconnect WhatsApp
-  await disconnectDevice(userId, deviceId).catch(() => {});
+  const device = devices[idx];
+
+  // Disconnect mengikut jenis device
+  if (device.type === 'meta') {
+    disconnectMetaDevice(userId, deviceId);
+  } else {
+    await disconnectDevice(userId, deviceId).catch(() => {});
+  }
 
   // Remove from list
   devices.splice(idx, 1);

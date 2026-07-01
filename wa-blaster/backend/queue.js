@@ -1,6 +1,7 @@
 const path = require('path');
-const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('./store');
+const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON, readUserJSON } = require('./store');
 const { sendMessageDevice, sendMediaDevice, getDeviceStatus } = require('./whatsapp');
+const { sendTextMeta, getMetaDeviceStatus } = require('./meta-api');
 const { processTemplate } = require('./templateEngine');
 const { UPLOAD_DIR } = require('./config');
 
@@ -97,9 +98,34 @@ function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, template
   return { queued: totalQueued, batches: batchSize ? Math.ceil(contacts.length / batchSize) : 1 };
 }
 
+// Check sama ada device connected (support Baileys dan Meta)
+function isDeviceConnected(userId, deviceId) {
+  const devices = readUserJSON(userId, 'devices.json');
+  const device = devices.find(d => d.id === deviceId);
+  if (device?.type === 'meta') return getMetaDeviceStatus(userId, deviceId).connected;
+  return getDeviceStatus(userId, deviceId).connected;
+}
+
+// Hantar mesej mengikut jenis device
+async function sendMessage(userId, deviceId, telefon, text, mediaFile) {
+  const devices = readUserJSON(userId, 'devices.json');
+  const device = devices.find(d => d.id === deviceId);
+
+  if (device?.type === 'meta') {
+    // Meta API — hantar teks sahaja (media belum disokong)
+    return sendTextMeta(userId, deviceId, telefon, text);
+  }
+
+  // Baileys (unofficial)
+  if (mediaFile) {
+    return sendMediaDevice(userId, deviceId, telefon, path.join(__dirname, UPLOAD_DIR, mediaFile), text);
+  }
+  return sendMessageDevice(userId, deviceId, telefon, text);
+}
+
 // Proses queue untuk satu device
 async function processQueue(userId, deviceId) {
-  if (!getDeviceStatus(userId, deviceId).connected) return;
+  if (!isDeviceConnected(userId, deviceId)) return;
 
   const queue = readDeviceJSON(userId, deviceId, 'queue.json');
   const now = Date.now();
@@ -111,11 +137,7 @@ async function processQueue(userId, deviceId) {
   for (const item of due) {
     try {
       const text = processTemplate(item.templateText, { nama: item.nama, telefon: item.telefon });
-      if (item.mediaFile) {
-        await sendMediaDevice(userId, deviceId, item.telefon, path.join(__dirname, UPLOAD_DIR, item.mediaFile), text);
-      } else {
-        await sendMessageDevice(userId, deviceId, item.telefon, text);
-      }
+      await sendMessage(userId, deviceId, item.telefon, text, item.mediaFile);
       item.status = 'sent';
       item.sentAt = new Date().toISOString();
 
