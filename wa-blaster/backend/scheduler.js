@@ -1,77 +1,87 @@
 const cron = require('node-cron');
-const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON, readUserJSON, readJSON } = require('./store');
+const schedulesRepo = require('./repos/schedules');
+const templatesRepo = require('./repos/templates');
+const contactsRepo = require('./repos/contacts');
+const blacklistRepo = require('./repos/blacklist');
+const devicesRepo = require('./repos/devices');
 const { getDeviceStatus, getChatHistory } = require('./whatsapp');
 const { getMetaDeviceStatus } = require('./meta-api');
 const { enqueueBlast, enqueueRotationBlast, processQueue } = require('./queue');
+const prospectsRepo = require('./repos/prospects');
+const botSettingsRepo = require('./repos/botSettings');
+const botMessages = require('./bot/messages');
+const botHumanizer = require('./bot/humanizer');
+const botTelegram = require('./bot/telegram');
 
 const activeJobs = new Map(); // key: scheduleId
 
-function resolveTemplate(schedule, userId, deviceId) {
-  if (schedule.useRotation && schedule.templateIds?.length) {
-    const templates = readUserJSON(userId, 'templates.json');
-    const idx = (schedule.rotationIndex || 0) % schedule.templateIds.length;
-    const tmpl = templates.find(t => t.id === schedule.templateIds[idx]);
+async function resolveTemplate(schedule, userId, deviceId) {
+  const templateIds = schedule.template_ids ? (typeof schedule.template_ids === 'string' ? JSON.parse(schedule.template_ids) : schedule.template_ids) : [];
+  if (schedule.use_rotation && templateIds?.length) {
+    const templates = await templatesRepo.getForUser(userId);
+    const idx = (schedule.rotation_index || 0) % templateIds.length;
+    const tmpl = templates.find(t => t.id === templateIds[idx]);
     if (!tmpl) throw new Error(`Template rotation ke-${idx + 1} tidak dijumpai`);
 
-    const list = readDeviceJSON(userId, deviceId, 'schedules.json');
-    const si = list.findIndex(s => s.id === schedule.id);
-    if (si >= 0) { list[si].rotationIndex = idx + 1; writeDeviceJSON(userId, deviceId, 'schedules.json', list); }
+    await schedulesRepo.setRotationIndex(schedule.id, idx + 1);
 
-    return { templateId: tmpl.id, templateText: tmpl.text, mediaFile: tmpl.mediaFile || null };
+    return { templateId: tmpl.id, templateText: tmpl.text, mediaFile: tmpl.media_file || null };
   }
-  return { templateId: null, templateText: schedule.template, mediaFile: schedule.mediaFile || null };
+  return { templateId: null, templateText: schedule.template, mediaFile: schedule.media_file || null };
 }
 
-function isConnected(userId, deviceId) {
-  const devices = readUserJSON(userId, 'devices.json');
-  const device = devices.find(d => d.id === deviceId);
+async function isConnected(userId, deviceId) {
+  const device = await devicesRepo.getById(deviceId);
   if (device?.type === 'meta') return getMetaDeviceStatus(userId, deviceId).connected;
   return getDeviceStatus(userId, deviceId).connected;
 }
 
 async function runBlast(schedule, userId, deviceId) {
-  if (!isConnected(userId, deviceId)) throw new Error('WhatsApp tidak bersambung');
+  if (!(await isConnected(userId, deviceId))) throw new Error('WhatsApp tidak bersambung');
 
-  const allContacts = readDeviceJSON(userId, deviceId, 'contacts.json');
-  const raw = schedule.contacts === 'all'
+  const allContacts = await contactsRepo.getForDevice(deviceId);
+  const scheduleContacts = schedule.contacts ? (typeof schedule.contacts === 'string' ? JSON.parse(schedule.contacts) : schedule.contacts) : 'all';
+  const raw = scheduleContacts === 'all'
     ? allContacts
-    : Array.isArray(schedule.contacts)
-      ? allContacts.filter(c => schedule.contacts.includes(c.id))
-      : schedule.contacts?.kumpulan
-        ? allContacts.filter(c => schedule.contacts.kumpulan.includes(c.kumpulan || 'Umum'))
+    : Array.isArray(scheduleContacts)
+      ? allContacts.filter(c => scheduleContacts.includes(c.id))
+      : scheduleContacts?.kumpulan
+        ? allContacts.filter(c => scheduleContacts.kumpulan.includes(c.kumpulan || 'Umum'))
         : allContacts;
 
   const seen = new Set();
   const deduped = raw.filter(c => { if (seen.has(c.telefon)) return false; seen.add(c.telefon); return true; });
 
-  const blacklist = readDeviceJSON(userId, deviceId, 'blacklist.json');
-  const blacklistSet = new Set(blacklist.map(b => b.telefon));
+  const blacklistSet = await blacklistRepo.getPhoneSet(deviceId);
   let targets = deduped.filter(c => !blacklistSet.has(c.telefon));
 
-  if (schedule.historyOnly) {
-    const historySet = new Set(getChatHistory(userId, deviceId));
+  if (schedule.history_only) {
+    const historySet = new Set(await getChatHistory(userId, deviceId));
     targets = targets.filter(c => historySet.has(c.telefon));
     if (!targets.length) throw new Error('Tiada contacts yang pernah ada history chat dengan nombor ini');
   }
 
   if (!targets.length) throw new Error('Tiada contacts untuk diblast (semua mungkin dalam blacklist)');
 
-  const contactGapMs = schedule.contactGapMs || 4000;
-  const templateGapMs = schedule.templateGapMs || 0;
-  const batchSize = schedule.batchSize || 0;
-  const batchGapMs = schedule.batchGapMs || 0;
+  const contactGapMs = schedule.contact_gap_ms || 4000;
+  const templateGapMs = schedule.template_gap_ms || 0;
+  const batchSize = schedule.batch_size || 0;
+  const batchGapMs = schedule.batch_gap_ms || 0;
 
-  if (schedule.useRotation && schedule.templateIds?.length && templateGapMs > 0) {
-    const allTmpl = readUserJSON(userId, 'templates.json');
-    const templates = schedule.templateIds.map(id => allTmpl.find(t => t.id === id)).filter(Boolean);
+  const templateIds = schedule.template_ids ? (typeof schedule.template_ids === 'string' ? JSON.parse(schedule.template_ids) : schedule.template_ids) : [];
+
+  if (schedule.use_rotation && templateIds?.length && templateGapMs > 0) {
+    const allTmpl = await templatesRepo.getForUser(userId);
+    const templates = templateIds.map(id => allTmpl.find(t => t.id === id)).filter(Boolean)
+      .map(t => ({ id: t.id, text: t.text, mediaFile: t.media_file }));
     if (!templates.length) throw new Error('Template tidak dijumpai');
 
-    const result = enqueueRotationBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templates, contactGapMs, templateGapMs, startAt: Date.now(), batchSize, batchGapMs });
+    const result = await enqueueRotationBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templates, contactGapMs, templateGapMs, startAt: Date.now(), batchSize, batchGapMs });
     return { ...result, contactGapMs, templateGapMs, templates: templates.length, batchSize, batchGapMs };
   }
 
-  const { templateText, mediaFile, templateId } = resolveTemplate(schedule, userId, deviceId);
-  const result = enqueueBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templateText, mediaFile, templateId, gapMs: contactGapMs, startAt: Date.now(), batchSize, batchGapMs });
+  const { templateText, mediaFile, templateId } = await resolveTemplate(schedule, userId, deviceId);
+  const result = await enqueueBlast({ userId, deviceId, scheduleId: schedule.id, contacts: targets, templateText, mediaFile, templateId, gapMs: contactGapMs, startAt: Date.now(), batchSize, batchGapMs });
   return { ...result, gapMs: contactGapMs, batchSize, batchGapMs };
 }
 
@@ -91,18 +101,19 @@ function scheduleJob(schedule, userId, deviceId) {
   if (schedule.type === 'one-time') {
     const delay = new Date(schedule.datetime).getTime() - Date.now();
     if (delay <= 0) {
-      runBlast(schedule, userId, deviceId).then(() => markDone(schedule.id, userId, deviceId)).catch(() => {});
+      runBlast(schedule, userId, deviceId).then(() => markDone(schedule.id)).catch(() => {});
       return;
     }
     const timer = setTimeout(() => {
-      runBlast(schedule, userId, deviceId).then(() => markDone(schedule.id, userId, deviceId)).catch(() => {});
+      runBlast(schedule, userId, deviceId).then(() => markDone(schedule.id)).catch(() => {});
       activeJobs.delete(schedule.id);
     }, delay);
     activeJobs.set(schedule.id, { type: 'timeout', ref: timer });
   } else {
-    const job = cron.schedule('* * * * *', () => {
-      const latest = readDeviceJSON(userId, deviceId, 'schedules.json').find(s => s.id === schedule.id);
-      if (latest && timeMatches(latest.pattern)) {
+    const job = cron.schedule('* * * * *', async () => {
+      const latest = await schedulesRepo.getById(schedule.id);
+      const pattern = latest?.pattern ? (typeof latest.pattern === 'string' ? JSON.parse(latest.pattern) : latest.pattern) : null;
+      if (latest && pattern && timeMatches(pattern)) {
         runBlast(latest, userId, deviceId).catch(() => {});
       }
     });
@@ -110,10 +121,8 @@ function scheduleJob(schedule, userId, deviceId) {
   }
 }
 
-function markDone(id, userId, deviceId) {
-  const list = readDeviceJSON(userId, deviceId, 'schedules.json');
-  const idx = list.findIndex(s => s.id === id);
-  if (idx >= 0) { list[idx].status = 'done'; writeDeviceJSON(userId, deviceId, 'schedules.json', list); }
+async function markDone(id) {
+  await schedulesRepo.setStatus(id, 'done');
 }
 
 function cancelJob(id) {
@@ -125,33 +134,107 @@ function cancelJob(id) {
 }
 
 // Restore semua schedules untuk semua users + devices
-function restoreAllJobs() {
-  const users = readJSON('users.json');
+async function restoreAllJobs() {
+  const active = await schedulesRepo.getAllActiveWithDevice();
   let total = 0;
 
-  for (const user of users) {
-    const devices = readUserJSON(user.id, 'devices.json');
-    for (const device of devices) {
-      const schedules = readDeviceJSON(user.id, device.id, 'schedules.json');
-      schedules.filter(s => s.status === 'active').forEach(s => {
-        scheduleJob(s, user.id, device.id);
-        total++;
-      });
-    }
+  for (const schedule of active) {
+    const device = await devicesRepo.getById(schedule.device_id);
+    if (!device) continue;
+    scheduleJob(schedule, device.user_id, device.id);
+    total++;
   }
 
   // Cron setiap minit: proses semua queues
   cron.schedule('* * * * *', async () => {
-    const allUsers = readJSON('users.json');
-    for (const user of allUsers) {
-      const devices = readUserJSON(user.id, 'devices.json');
-      for (const dev of devices) {
-        await processQueue(user.id, dev.id).catch(() => {});
+    const devices = await devicesRepo.getAllWithUser();
+    for (const dev of devices) {
+      await processQueue(dev.user_id, dev.id).catch(() => {});
+    }
+  });
+
+  startClosingBotCronJobs();
+
+  console.log(`${total} jadual dipulihkan`);
+}
+
+// Cron closing-bot — hanya jalan untuk device yang closing_bot_enabled = 1
+function startClosingBotCronJobs() {
+  async function botDevices() {
+    const devices = await devicesRepo.getAllWithUser();
+    return devices.filter(d => d.closing_bot_enabled);
+  }
+
+  // Daily report — 12 malam
+  cron.schedule('0 0 * * *', async () => {
+    for (const device of await botDevices()) {
+      try {
+        const settings = await botSettingsRepo.getByDeviceId(device.id);
+        if (!settings) continue;
+        const stats = await prospectsRepo.getDailyStats(device.id);
+        await botTelegram.sendDailyReport(stats, settings.ad_spend_today, settings);
+      } catch (e) {
+        console.error(`[bot-cron] Daily report gagal (${device.id}):`, e.message);
       }
     }
   });
 
-  console.log(`${total} jadual dipulihkan`);
+  // Follow up 1 jam — check setiap 15 minit
+  cron.schedule('*/15 * * * *', async () => {
+    for (const device of await botDevices()) {
+      try {
+        const prospects = await prospectsRepo.getForFollowUp(device.id, 1, 'follow_up_1h');
+        for (const p of prospects) {
+          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.followUp1h());
+          await prospectsRepo.markFollowUpSent(device.id, p.phone_number, 'follow_up_1h');
+        }
+      } catch (e) {
+        console.error(`[bot-cron] Follow up 1h gagal (${device.id}):`, e.message);
+      }
+    }
+  });
+
+  // Follow up 24 jam — check setiap jam
+  cron.schedule('0 * * * *', async () => {
+    for (const device of await botDevices()) {
+      try {
+        const prospects = await prospectsRepo.getForFollowUp(device.id, 24, 'follow_up_24h');
+        for (const p of prospects) {
+          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.followUp24h());
+          await prospectsRepo.markFollowUpSent(device.id, p.phone_number, 'follow_up_24h');
+        }
+      } catch (e) {
+        console.error(`[bot-cron] Follow up 24h gagal (${device.id}):`, e.message);
+      }
+    }
+  });
+
+  // Follow up 72 jam — check setiap 6 jam
+  cron.schedule('0 */6 * * *', async () => {
+    for (const device of await botDevices()) {
+      try {
+        const prospects = await prospectsRepo.getForFollowUp(device.id, 72, 'follow_up_72h');
+        for (const p of prospects) {
+          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.followUp72h());
+          await prospectsRepo.markFollowUpSent(device.id, p.phone_number, 'follow_up_72h');
+          await prospectsRepo.updateStatus(device.id, p.phone_number, 'cold');
+        }
+      } catch (e) {
+        console.error(`[bot-cron] Follow up 72h gagal (${device.id}):`, e.message);
+      }
+    }
+  });
+
+  // Humanizer sleep-queue flush — setiap minit
+  cron.schedule('* * * * *', async () => {
+    try {
+      await botHumanizer.processQueue();
+    } catch (e) {
+      console.error('[bot-cron] Humanizer queue flush gagal:', e.message);
+    }
+  });
+
+  console.log('[bot-cron] Closing-bot cron jobs started');
 }
 
 module.exports = { scheduleJob, cancelJob, restoreAllJobs, runBlast };

@@ -1,5 +1,5 @@
 const https = require('https');
-const { readDeviceJSONObject, writeDeviceJSON } = require('./store');
+const metaCredentialsRepo = require('./repos/metaCredentials');
 
 const META_API_VERSION = 'v21.0';
 const BASE_URL = `graph.facebook.com`;
@@ -84,8 +84,8 @@ async function setupMetaDevice(userId, deviceId, phoneNumberId, accessToken) {
   conn.verifiedName = info.verified_name || null;
   conn.status = 'connected';
 
-  // Simpan credentials ke disk
-  writeDeviceJSON(userId, deviceId, 'meta-creds.json', {
+  // Simpan credentials ke MySQL
+  await metaCredentialsRepo.upsert(deviceId, {
     phoneNumberId,
     accessToken,
     displayPhone: conn.displayPhone,
@@ -96,16 +96,16 @@ async function setupMetaDevice(userId, deviceId, phoneNumberId, accessToken) {
   return { displayPhone: conn.displayPhone, verifiedName: conn.verifiedName };
 }
 
-// Load credentials dari disk (dipanggil masa startup)
-function loadMetaDevice(userId, deviceId) {
-  const creds = readDeviceJSONObject(userId, deviceId, 'meta-creds.json');
-  if (!creds.phoneNumberId || !creds.accessToken) return;
+// Load credentials dari MySQL (dipanggil masa startup)
+async function loadMetaDevice(userId, deviceId) {
+  const creds = await metaCredentialsRepo.get(deviceId);
+  if (!creds?.phone_number_id || !creds?.access_token) return;
 
   const conn = getMetaConn(userId, deviceId);
-  conn.phoneNumberId = creds.phoneNumberId;
-  conn.accessToken = creds.accessToken;
-  conn.displayPhone = creds.displayPhone || null;
-  conn.verifiedName = creds.verifiedName || null;
+  conn.phoneNumberId = creds.phone_number_id;
+  conn.accessToken = creds.access_token;
+  conn.displayPhone = creds.display_phone || null;
+  conn.verifiedName = creds.verified_name || null;
   conn.status = 'connected';
   console.log(`[Meta] ${userId}::${deviceId} restored — ${conn.displayPhone}`);
 }
@@ -154,7 +154,7 @@ function getMetaDeviceStatus(userId, deviceId) {
 function disconnectMetaDevice(userId, deviceId) {
   const k = connKey(userId, deviceId);
   metaConns.delete(k);
-  writeDeviceJSON(userId, deviceId, 'meta-creds.json', {});
+  metaCredentialsRepo.remove(deviceId).catch(() => {});
 }
 
 module.exports = {

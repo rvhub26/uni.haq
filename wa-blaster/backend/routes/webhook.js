@@ -1,7 +1,10 @@
 const router = require('express').Router();
-const { readJSON, writeJSON, readUserJSON, readDeviceJSON, writeDeviceJSON } = require('../store');
+const metaCredentialsRepo = require('../repos/metaCredentials');
+const devicesRepo = require('../repos/devices');
+const queueRepo = require('../repos/queue');
+const inbound = require('../inbound');
 
-const VERIFY_TOKEN = 'unihaq2026';
+const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || 'unihaq2026';
 
 // Meta verify webhook — GET request
 router.get('/', (req, res) => {
@@ -17,75 +20,46 @@ router.get('/', (req, res) => {
   res.status(403).send('Forbidden');
 });
 
-// Cari device berdasarkan phone_number_id
-function findDeviceByPhoneNumberId(phoneNumberId) {
-  try {
-    const users = readJSON('users.json');
-    for (const user of users) {
-      const devices = readUserJSON(user.id, 'devices.json');
-      for (const device of devices) {
-        if (device.type !== 'meta') continue;
-        const creds = require('../store').readDeviceJSONObject(user.id, device.id, 'meta-creds.json');
-        if (creds.phoneNumberId === phoneNumberId) {
-          return { userId: user.id, deviceId: device.id };
-        }
-      }
-    }
-  } catch {}
-  return null;
-}
-
 // Meta incoming messages — POST request
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const body = req.body;
   if (body.object !== 'whatsapp_business_account') return res.status(404).send('Not found');
 
-  body.entry?.forEach(entry => {
-    entry.changes?.forEach(change => {
+  for (const entry of body.entry || []) {
+    for (const change of entry.changes || []) {
       const value = change.value;
       const phoneNumberId = value.metadata?.phone_number_id;
-      const device = phoneNumberId ? findDeviceByPhoneNumberId(phoneNumberId) : null;
+      const device = phoneNumberId ? await metaCredentialsRepo.findDeviceByPhoneNumberId(phoneNumberId) : null;
+      const deviceId = device?.device_id || null;
 
       // Delivery status updates (sent/delivered/read/failed)
       if (value.statuses) {
-        value.statuses.forEach(s => {
+        for (const s of value.statuses) {
           console.log(`[Webhook] Status: ${s.status} → ${s.recipient_id}`);
-          if (!device) return;
-
-          // Update queue item status
-          const queue = readDeviceJSON(device.userId, device.deviceId, 'queue.json');
-          const item = queue.find(q => q.telefon === s.recipient_id && q.status === 'sent');
-          if (item) {
-            if (s.status === 'delivered') item.deliveredAt = new Date().toISOString();
-            if (s.status === 'read') item.readAt = new Date().toISOString();
-            if (s.status === 'failed') { item.failed = true; item.failedAt = new Date().toISOString(); }
-            writeDeviceJSON(device.userId, device.deviceId, 'queue.json', queue);
-          }
-        });
+          if (!deviceId) continue;
+          await queueRepo.markDeliveryStatus(deviceId, s.recipient_id, s.status).catch(() => {});
+        }
       }
 
       // Incoming messages (reply dari prospek)
       if (value.messages) {
-        value.messages.forEach(msg => {
+        for (const msg of value.messages) {
           const dari = msg.from;
-          const teks = msg.text?.body || '[media]';
-          console.log(`[Webhook] Mesej masuk dari ${dari}: ${teks}`);
+          const teks = msg.text?.body || '';
+          const isImage = !!msg.image;
+          console.log(`[Webhook] Mesej masuk dari ${dari}: ${teks || '[media]'}`);
 
-          if (!device) return;
-          const { readDeviceJSONObject: readObj, writeDeviceJSON: writeD } = require('../store');
-          const contacts = readDeviceJSON(device.userId, device.deviceId, 'contacts.json');
-          const contact = contacts.find(c => c.telefon === dari);
-          if (!contact) return;
-
-          const replies = readObj(device.userId, device.deviceId, 'replies.json');
-          if (!replies[dari]) {
-            replies[dari] = { nama: contact.nama, replied: true, repliedAt: new Date().toISOString() };
-            writeD(device.userId, device.deviceId, 'replies.json', replies);
-          }
-        });
+          if (!deviceId) continue;
+          const device = await devicesRepo.getById(deviceId);
+          try {
+            await inbound.handleInboundMessage({
+              userId: device?.user_id, deviceId, from: dari, text: teks.trim(), isImage, waMessageId: msg.id,
+            });
+          } catch {}
+        }
       }
-    });
-  });
+    }
+  }
 
   res.status(200).send('EVENT_RECEIVED');
 });

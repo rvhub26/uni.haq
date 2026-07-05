@@ -1,6 +1,8 @@
 const router = require('express').Router();
-const { readDeviceJSON, writeDeviceJSON } = require('../store');
+const schedulesRepo = require('../repos/schedules');
+const logsRepo = require('../repos/logs');
 const { scheduleJob, cancelJob, runBlast } = require('../scheduler');
+const { getQueueStatus, cancelQueueForSchedule } = require('../queue');
 
 function requireDevice(req, res, next) {
   if (!req.session.deviceId) return res.status(400).json({ error: 'Pilih peranti WhatsApp dahulu' });
@@ -9,7 +11,23 @@ function requireDevice(req, res, next) {
 
 function ctx(req) { return { userId: req.session.userId, deviceId: req.session.deviceId }; }
 
-router.post('/', requireDevice, (req, res) => {
+function toApi(s) {
+  return {
+    id: s.id, userId: undefined, deviceId: s.device_id,
+    useRotation: !!s.use_rotation,
+    templateIds: s.template_ids ? (typeof s.template_ids === 'string' ? JSON.parse(s.template_ids) : s.template_ids) : null,
+    rotationIndex: s.rotation_index,
+    template: s.template, mediaFile: s.media_file,
+    type: s.type, datetime: s.datetime,
+    pattern: s.pattern ? (typeof s.pattern === 'string' ? JSON.parse(s.pattern) : s.pattern) : null,
+    contacts: s.contacts ? (typeof s.contacts === 'string' ? JSON.parse(s.contacts) : s.contacts) : 'all',
+    contactGapMs: s.contact_gap_ms, templateGapMs: s.template_gap_ms,
+    batchSize: s.batch_size, batchGapMs: s.batch_gap_ms,
+    historyOnly: !!s.history_only, status: s.status, createdAt: s.created_at,
+  };
+}
+
+router.post('/', requireDevice, async (req, res) => {
   const { userId, deviceId } = ctx(req);
   const { template, mediaFile, type, datetime, pattern, contacts, useRotation, templateIds, contactGapMs, templateGapMs, batchSize, batchGapMs, historyOnly } = req.body;
 
@@ -25,10 +43,8 @@ router.post('/', requireDevice, (req, res) => {
 
   const schedule = {
     id: `sch_${Date.now()}`,
-    userId,
-    deviceId,
     useRotation: !!useRotation,
-    templateIds: useRotation ? templateIds : null,
+    templateIds: useRotation ? templateIds : [],
     rotationIndex: 0,
     template: useRotation ? null : template?.trim(),
     mediaFile: useRotation ? null : (mediaFile || null),
@@ -42,59 +58,59 @@ router.post('/', requireDevice, (req, res) => {
     batchGapMs: batchGapMs || 0,
     historyOnly: !!historyOnly,
     status: 'active',
-    createdAt: new Date().toISOString(),
   };
 
-  const list = readDeviceJSON(userId, deviceId, 'schedules.json');
-  list.push(schedule);
-  writeDeviceJSON(userId, deviceId, 'schedules.json', list);
-  scheduleJob(schedule, userId, deviceId);
-  res.json(schedule);
+  const saved = await schedulesRepo.create(deviceId, schedule);
+  scheduleJob(saved, userId, deviceId);
+  res.json(toApi(saved));
 });
 
-router.get('/', requireDevice, (req, res) => {
-  const { userId, deviceId } = ctx(req);
-  res.json(readDeviceJSON(userId, deviceId, 'schedules.json'));
+router.get('/', requireDevice, async (req, res) => {
+  const { deviceId } = ctx(req);
+  const list = await schedulesRepo.getForDevice(deviceId);
+  res.json(list.map(toApi));
 });
 
-router.delete('/:id', requireDevice, (req, res) => {
-  const { userId, deviceId } = ctx(req);
-  const list = readDeviceJSON(userId, deviceId, 'schedules.json');
-  const filtered = list.filter(s => s.id !== req.params.id);
-  if (filtered.length === list.length) return res.status(404).json({ error: 'Jadual tidak dijumpai' });
-  writeDeviceJSON(userId, deviceId, 'schedules.json', filtered);
+router.delete('/:id', requireDevice, async (req, res) => {
+  const { deviceId } = ctx(req);
+  const existing = await schedulesRepo.getById(req.params.id);
+  if (!existing || existing.device_id !== deviceId) return res.status(404).json({ error: 'Jadual tidak dijumpai' });
+  await schedulesRepo.remove(req.params.id);
   cancelJob(req.params.id);
   res.json({ ok: true });
 });
 
-router.get('/logs', requireDevice, (req, res) => {
-  const { userId, deviceId } = ctx(req);
-  res.json(readDeviceJSON(userId, deviceId, 'logs.json'));
+router.get('/logs', requireDevice, async (req, res) => {
+  const { deviceId } = ctx(req);
+  const logs = await logsRepo.getForDevice(deviceId);
+  res.json(logs.map(l => ({
+    id: l.id, scheduleId: l.schedule_id, templateId: l.template_id, template: l.template_text,
+    blastAt: l.blast_at, sent: l.sent, failed: l.failed,
+    details: typeof l.details === 'string' ? JSON.parse(l.details) : l.details,
+  })));
 });
 
-router.delete('/logs', requireDevice, (req, res) => {
-  const { userId, deviceId } = ctx(req);
-  writeDeviceJSON(userId, deviceId, 'logs.json', []);
+router.delete('/logs', requireDevice, async (req, res) => {
+  const { deviceId } = ctx(req);
+  await logsRepo.removeAllForDevice(deviceId);
   res.json({ ok: true });
 });
 
-router.get('/queue', requireDevice, (req, res) => {
+router.get('/queue', requireDevice, async (req, res) => {
   const { userId, deviceId } = ctx(req);
-  const { getQueueStatus } = require('../queue');
-  res.json(getQueueStatus(userId, deviceId));
+  res.json(await getQueueStatus(userId, deviceId));
 });
 
-router.delete('/:id/queue', requireDevice, (req, res) => {
+router.delete('/:id/queue', requireDevice, async (req, res) => {
   const { userId, deviceId } = ctx(req);
-  const { cancelQueueForSchedule } = require('../queue');
-  cancelQueueForSchedule(userId, deviceId, req.params.id);
+  await cancelQueueForSchedule(userId, deviceId, req.params.id);
   res.json({ ok: true });
 });
 
 router.post('/:id/blast-now', requireDevice, async (req, res) => {
   const { userId, deviceId } = ctx(req);
-  const schedule = readDeviceJSON(userId, deviceId, 'schedules.json').find(s => s.id === req.params.id);
-  if (!schedule) return res.status(404).json({ error: 'Jadual tidak dijumpai' });
+  const schedule = await schedulesRepo.getById(req.params.id);
+  if (!schedule || schedule.device_id !== deviceId) return res.status(404).json({ error: 'Jadual tidak dijumpai' });
   cancelJob(req.params.id);
   try {
     res.json(await runBlast(schedule, userId, deviceId));

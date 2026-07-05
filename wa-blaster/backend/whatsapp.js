@@ -3,7 +3,8 @@ const fs = require('fs');
 const qrcode = require('qrcode');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const { AUTH_DIR } = require('./config');
-const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON } = require('./store');
+const chatThreadsRepo = require('./repos/chatThreads');
+const inbound = require('./inbound');
 
 // Map of active connections: `${userId}::${deviceId}` → state object
 const conns = new Map();
@@ -71,6 +72,7 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
     version,
     auth: state,
     printQRInTerminal: false,
+    browser: ['UniHaq', 'Chrome', '120.0.0'],
     keepAliveIntervalMs: 30000,
     connectTimeoutMs: 60000,
     retryRequestDelayMs: 3000,
@@ -87,31 +89,35 @@ async function connectDevice(userId, deviceId, pairingPhone = null) {
 
   sock.ev.on('chats.upsert', (chats) => {
     conn.lastActivity = Date.now();
-    const existing = readDeviceJSON(userId, deviceId, 'chat_history.json');
-    const existingSet = new Set(existing);
     for (const chat of chats) {
       const jid = chat.id;
       if (!jid?.endsWith('@s.whatsapp.net')) continue;
       const phone = jid.replace('@s.whatsapp.net', '');
-      existingSet.add(phone);
+      chatThreadsRepo.record(deviceId, phone).catch(() => {});
     }
-    writeDeviceJSON(userId, deviceId, 'chat_history.json', [...existingSet]);
   });
 
-  sock.ev.on('messages.upsert', ({ messages }) => {
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
     conn.lastActivity = Date.now();
     for (const msg of messages) {
       if (msg.key.fromMe || !msg.message) continue;
       const jid = msg.key.remoteJid;
       if (!jid?.endsWith('@s.whatsapp.net')) continue;
       const telefon = jid.replace('@s.whatsapp.net', '');
-      const contacts = readDeviceJSON(userId, deviceId, 'contacts.json');
-      const contact = contacts.find(c => c.telefon === telefon);
-      if (!contact) continue;
-      const replies = readDeviceJSONObject(userId, deviceId, 'replies.json');
-      if (!replies[telefon]) {
-        replies[telefon] = { nama: contact.nama, replied: true, repliedAt: new Date().toISOString() };
-        writeDeviceJSON(userId, deviceId, 'replies.json', replies);
+
+      const text =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        '';
+      const isImage = !!msg.message?.imageMessage;
+      if (!text && !isImage) continue;
+
+      try {
+        await inbound.handleInboundMessage({ userId, deviceId, from: telefon, text: text.trim(), isImage, waMessageId: msg.key.id });
+      } catch (e) {
+        console.log(`[WA] ${userId}::${deviceId} inbound gagal: ${e.message}`);
       }
     }
   });
@@ -279,12 +285,34 @@ async function sendMediaDevice(userId, deviceId, phone, filePath, caption) {
   }
 }
 
-function getChatHistory(userId, deviceId) {
-  return readDeviceJSON(userId, deviceId, 'chat_history.json');
+async function getChatHistory(userId, deviceId) {
+  const set = await chatThreadsRepo.getPhoneSet(deviceId);
+  return [...set];
+}
+
+async function sendTypingIndicator(userId, deviceId, phone) {
+  const conn = getConn(userId, deviceId);
+  if (!conn.sock || conn.status !== 'connected') return;
+  try { await conn.sock.sendPresenceUpdate('composing', toJID(phone)); } catch {}
+}
+
+async function stopTypingIndicator(userId, deviceId, phone) {
+  const conn = getConn(userId, deviceId);
+  if (!conn.sock || conn.status !== 'connected') return;
+  try { await conn.sock.sendPresenceUpdate('paused', toJID(phone)); } catch {}
+}
+
+async function markAsRead(userId, deviceId, messageKey) {
+  const conn = getConn(userId, deviceId);
+  if (!conn.sock || conn.status !== 'connected') return;
+  try { await conn.sock.readMessages([messageKey]); } catch {}
 }
 
 module.exports = {
   connectDevice,
+  sendTypingIndicator,
+  stopTypingIndicator,
+  markAsRead,
   disconnectDevice,
   getDeviceStatus,
   getDeviceQR,

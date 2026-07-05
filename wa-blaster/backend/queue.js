@@ -1,5 +1,8 @@
 const path = require('path');
-const { readDeviceJSON, readDeviceJSONObject, writeDeviceJSON, readUserJSON } = require('./store');
+const queueRepo = require('./repos/queue');
+const sentHistoryRepo = require('./repos/sentHistory');
+const logsRepo = require('./repos/logs');
+const devicesRepo = require('./repos/devices');
 const { sendMessageDevice, sendMediaDevice, getDeviceStatus } = require('./whatsapp');
 const { sendTextMeta, getMetaDeviceStatus } = require('./meta-api');
 const { processTemplate } = require('./templateEngine');
@@ -28,9 +31,8 @@ function buildSendTimes(count, now, gapMs, batchSize, batchGapMs) {
 }
 
 // Tambah contacts ke queue (single template atau rotation tanpa gap)
-function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, mediaFile, templateId, gapMs, startAt, batchSize, batchGapMs }) {
-  const queue = readDeviceJSON(userId, deviceId, 'queue.json');
-  const sentHistory = readDeviceJSONObject(userId, deviceId, 'sent_history.json');
+async function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, mediaFile, templateId, gapMs, startAt, batchSize, batchGapMs }) {
+  const sentHistory = templateId ? await sentHistoryRepo.getGroupedForDevice(deviceId) : {};
   const now = startAt || Date.now();
 
   const eligible = templateId
@@ -41,7 +43,6 @@ function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, me
 
   const newItems = eligible.map((contact, i) => ({
     id: `q_${Date.now()}_${i}`,
-    userId,
     deviceId,
     scheduleId,
     nama: contact.nama,
@@ -49,22 +50,19 @@ function enqueueBlast({ userId, deviceId, scheduleId, contacts, templateText, me
     templateId: templateId || null,
     templateText,
     mediaFile: mediaFile || null,
-    sendAt: sendTimes[i],
-    status: 'pending',
-    createdAt: new Date().toISOString(),
+    sendAt: new Date(sendTimes[i]),
   }));
 
-  queue.push(...newItems);
-  writeDeviceJSON(userId, deviceId, 'queue.json', queue);
+  if (newItems.length) await queueRepo.insertMany(newItems);
   return { queued: newItems.length, batches: batchSize ? Math.ceil(newItems.length / batchSize) : 1 };
 }
 
 // Queue rotation blast — semua template sekaligus dengan gap
-function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, templates, contactGapMs, templateGapMs, startAt, batchSize, batchGapMs }) {
-  const queue = readDeviceJSON(userId, deviceId, 'queue.json');
-  const sentHistory = readDeviceJSONObject(userId, deviceId, 'sent_history.json');
+async function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, templates, contactGapMs, templateGapMs, startAt, batchSize, batchGapMs }) {
+  const sentHistory = await sentHistoryRepo.getGroupedForDevice(deviceId);
   const now = startAt || Date.now();
   let totalQueued = 0;
+  const newItems = [];
 
   const sendTimes = buildSendTimes(contacts.length, now, contactGapMs, batchSize, batchGapMs);
 
@@ -76,9 +74,8 @@ function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, template
     const baseTime = sendTimes[contactIdx];
 
     unsentTemplates.forEach((tmpl, tmplIdx) => {
-      queue.push({
+      newItems.push({
         id: `q_${Date.now()}_c${contactIdx}_t${tmplIdx}_${Math.random().toString(36).slice(2, 6)}`,
-        userId,
         deviceId,
         scheduleId,
         nama: contact.nama,
@@ -86,30 +83,26 @@ function enqueueRotationBlast({ userId, deviceId, scheduleId, contacts, template
         templateId: tmpl.id,
         templateText: tmpl.text,
         mediaFile: tmpl.mediaFile || null,
-        sendAt: baseTime + tmplIdx * templateGapMs,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
+        sendAt: new Date(baseTime + tmplIdx * templateGapMs),
       });
       totalQueued++;
     });
   });
 
-  writeDeviceJSON(userId, deviceId, 'queue.json', queue);
+  if (newItems.length) await queueRepo.insertMany(newItems);
   return { queued: totalQueued, batches: batchSize ? Math.ceil(contacts.length / batchSize) : 1 };
 }
 
 // Check sama ada device connected (support Baileys dan Meta)
-function isDeviceConnected(userId, deviceId) {
-  const devices = readUserJSON(userId, 'devices.json');
-  const device = devices.find(d => d.id === deviceId);
+async function isDeviceConnected(userId, deviceId) {
+  const device = await devicesRepo.getById(deviceId);
   if (device?.type === 'meta') return getMetaDeviceStatus(userId, deviceId).connected;
   return getDeviceStatus(userId, deviceId).connected;
 }
 
 // Hantar mesej mengikut jenis device
 async function sendMessage(userId, deviceId, telefon, text, mediaFile) {
-  const devices = readUserJSON(userId, 'devices.json');
-  const device = devices.find(d => d.id === deviceId);
+  const device = await devicesRepo.getById(deviceId);
 
   if (device?.type === 'meta') {
     // Meta API — hantar teks sahaja (media belum disokong)
@@ -125,79 +118,55 @@ async function sendMessage(userId, deviceId, telefon, text, mediaFile) {
 
 // Proses queue untuk satu device
 async function processQueue(userId, deviceId) {
-  if (!isDeviceConnected(userId, deviceId)) return;
+  if (!(await isDeviceConnected(userId, deviceId))) return;
 
-  const queue = readDeviceJSON(userId, deviceId, 'queue.json');
-  const now = Date.now();
-  const due = queue.filter(q => q.status === 'pending' && q.sendAt <= now);
+  const due = await queueRepo.getDuePending(deviceId);
   if (!due.length) return;
 
-  const historyUpdates = {};
-
   for (const item of due) {
+    let status = 'sent';
+    let error = null;
     try {
-      const text = processTemplate(item.templateText, { nama: item.nama, telefon: item.telefon });
-      await sendMessage(userId, deviceId, item.telefon, text, item.mediaFile);
-      item.status = 'sent';
-      item.sentAt = new Date().toISOString();
-
-      if (item.templateId) {
-        if (!historyUpdates[item.telefon]) historyUpdates[item.telefon] = [];
-        if (!historyUpdates[item.telefon].includes(item.templateId)) {
-          historyUpdates[item.telefon].push(item.templateId);
-        }
-      }
+      const text = processTemplate(item.template_text, { nama: item.nama, telefon: item.telefon });
+      await sendMessage(userId, deviceId, item.telefon, text, item.media_file);
+      await queueRepo.markSent(item.id);
+      if (item.template_id) await sentHistoryRepo.record(deviceId, item.telefon, item.template_id);
     } catch (e) {
-      item.status = 'failed';
-      item.error = e.message;
+      status = 'failed';
+      error = e.message;
+      await queueRepo.markFailed(item.id, error);
     }
 
-    const logs = readDeviceJSON(userId, deviceId, 'logs.json');
-    logs.unshift({
-      id: `log_${Date.now()}`,
-      scheduleId: item.scheduleId,
-      templateId: item.templateId || null,
-      template: item.templateText,
-      blastAt: new Date().toISOString(),
-      sent: item.status === 'sent' ? 1 : 0,
-      failed: item.status === 'failed' ? 1 : 0,
-      details: [{ nama: item.nama, telefon: item.telefon, status: item.status }],
+    await logsRepo.create({
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      deviceId,
+      scheduleId: item.schedule_id,
+      templateId: item.template_id || null,
+      templateText: item.template_text,
+      blastAt: new Date(),
+      sent: status === 'sent' ? 1 : 0,
+      failed: status === 'failed' ? 1 : 0,
+      details: [{ nama: item.nama, telefon: item.telefon, status }],
     });
-    writeDeviceJSON(userId, deviceId, 'logs.json', logs.slice(0, 200));
   }
 
-  if (Object.keys(historyUpdates).length) {
-    const history = readDeviceJSONObject(userId, deviceId, 'sent_history.json');
-    Object.entries(historyUpdates).forEach(([phone, tmplIds]) => {
-      if (!history[phone]) history[phone] = [];
-      tmplIds.forEach(id => { if (!history[phone].includes(id)) history[phone].push(id); });
-    });
-    writeDeviceJSON(userId, deviceId, 'sent_history.json', history);
-  }
-
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const updated = queue.map(q => due.find(d => d.id === q.id) || q)
-    .filter(q => !(q.status !== 'pending' && new Date(q.createdAt).getTime() < cutoff));
-  writeDeviceJSON(userId, deviceId, 'queue.json', updated);
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  queueRepo.deleteOldProcessed(deviceId, cutoff).catch(() => {});
 }
 
 function getQueueStatus(userId, deviceId) {
-  const queue = readDeviceJSON(userId, deviceId, 'queue.json');
-  return queue.filter(q => q.status === 'pending').map(q => ({
+  return queueRepo.getPendingForDevice(deviceId).then(rows => rows.map(q => ({
     id: q.id,
     nama: q.nama,
     telefon: q.telefon,
-    templateId: q.templateId,
-    sendAt: new Date(q.sendAt).toISOString(),
-    scheduleId: q.scheduleId,
-  }));
+    templateId: q.template_id,
+    sendAt: new Date(q.send_at).toISOString(),
+    scheduleId: q.schedule_id,
+  })));
 }
 
 function cancelQueueForSchedule(userId, deviceId, scheduleId) {
-  const queue = readDeviceJSON(userId, deviceId, 'queue.json');
-  writeDeviceJSON(userId, deviceId, 'queue.json',
-    queue.filter(q => !(q.scheduleId === scheduleId && q.status === 'pending'))
-  );
+  return queueRepo.removePendingForSchedule(deviceId, scheduleId);
 }
 
 module.exports = { enqueueBlast, enqueueRotationBlast, processQueue, getQueueStatus, cancelQueueForSchedule };

@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { readUserJSON, writeUserJSON, deleteDeviceDir } = require('../store');
+const devicesRepo = require('../repos/devices');
 const { connectDevice, disconnectDevice, getDeviceStatus, getDeviceQR } = require('../whatsapp');
 const { setupMetaDevice, getMetaDeviceStatus, disconnectMetaDevice } = require('../meta-api');
 
@@ -9,18 +9,19 @@ async function connectWithPairingCode(userId, deviceId, phone) {
 
 const MAX_DEVICES = 10;
 
-function getUserDevices(userId) { return readUserJSON(userId, 'devices.json'); }
-function saveUserDevices(userId, devices) { writeUserJSON(userId, 'devices.json', devices); }
+function toApi(d, extra = {}) {
+  return { id: d.id, name: d.name, type: d.type, closingBotEnabled: !!d.closing_bot_enabled, createdAt: d.created_at, ...extra };
+}
 
 // GET /api/devices — list semua devices user dengan status
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const userId = req.session.userId;
-  const devices = getUserDevices(userId);
+  const devices = await devicesRepo.getForUser(userId);
   const result = devices.map(d => {
     const status = d.type === 'meta'
       ? getMetaDeviceStatus(userId, d.id)
       : { ...getDeviceStatus(userId, d.id), qr: getDeviceQR(userId, d.id) };
-    return { ...d, ...status, isCurrent: req.session.deviceId === d.id };
+    return toApi(d, { ...status, isCurrent: req.session.deviceId === d.id });
   });
   res.json(result);
 });
@@ -28,21 +29,19 @@ router.get('/', (req, res) => {
 // POST /api/devices — tambah device baru
 router.post('/', async (req, res) => {
   const userId = req.session.userId;
-  const devices = getUserDevices(userId);
+  const count = await devicesRepo.countForUser(userId);
 
-  if (devices.length >= MAX_DEVICES) {
+  if (count >= MAX_DEVICES) {
     return res.status(400).json({ error: `Had maksimum ${MAX_DEVICES} peranti` });
   }
 
   const deviceId = `dev_${Date.now()}`;
-  const name = (req.body.name || `Nombor ${devices.length + 1}`).trim();
+  const name = (req.body.name || `Nombor ${count + 1}`).trim();
 
-  const newDevice = { id: deviceId, name, createdAt: new Date().toISOString() };
-  devices.push(newDevice);
-  saveUserDevices(userId, devices);
+  const newDevice = await devicesRepo.create({ id: deviceId, userId, name, type: 'baileys' });
 
   // Set sebagai device aktif kalau ni first device
-  if (devices.length === 1 || !req.session.deviceId) {
+  if (count === 0 || !req.session.deviceId) {
     req.session.deviceId = deviceId;
     await new Promise(r => req.session.save(r));
   }
@@ -50,16 +49,16 @@ router.post('/', async (req, res) => {
   // Mula connection (async — QR akan muncul selepas beberapa saat)
   connectDevice(userId, deviceId).catch(() => {});
 
-  res.json({ ...newDevice, status: 'connecting', connected: false, isCurrent: req.session.deviceId === deviceId });
+  res.json(toApi(newDevice, { status: 'connecting', connected: false, isCurrent: req.session.deviceId === deviceId }));
 });
 
 // POST /api/devices/:deviceId/select — tukar device aktif
 router.post('/:deviceId/select', async (req, res) => {
   const userId = req.session.userId;
   const { deviceId } = req.params;
-  const devices = getUserDevices(userId);
+  const device = await devicesRepo.getById(deviceId);
 
-  if (!devices.find(d => d.id === deviceId)) {
+  if (!device || device.user_id !== userId) {
     return res.status(404).json({ error: 'Peranti tidak dijumpai' });
   }
 
@@ -79,9 +78,9 @@ router.post('/:deviceId/select', async (req, res) => {
 router.post('/:deviceId/connect', async (req, res) => {
   const userId = req.session.userId;
   const { deviceId } = req.params;
-  const devices = getUserDevices(userId);
+  const device = await devicesRepo.getById(deviceId);
 
-  if (!devices.find(d => d.id === deviceId)) {
+  if (!device || device.user_id !== userId) {
     return res.status(404).json({ error: 'Peranti tidak dijumpai' });
   }
 
@@ -99,8 +98,8 @@ router.post('/:deviceId/pair', async (req, res) => {
     return res.status(400).json({ error: 'Nombor telefon tidak sah. Contoh: 601234567890' });
   }
 
-  const devices = getUserDevices(userId);
-  if (!devices.find(d => d.id === deviceId)) {
+  const device = await devicesRepo.getById(deviceId);
+  if (!device || device.user_id !== userId) {
     return res.status(404).json({ error: 'Peranti tidak dijumpai' });
   }
 
@@ -127,24 +126,40 @@ router.get('/:deviceId/status', (req, res) => {
 });
 
 // PUT /api/devices/:deviceId — rename device
-router.put('/:deviceId', (req, res) => {
+router.put('/:deviceId', async (req, res) => {
   const userId = req.session.userId;
   const { deviceId } = req.params;
-  const devices = getUserDevices(userId);
-  const dev = devices.find(d => d.id === deviceId);
-  if (!dev) return res.status(404).json({ error: 'Peranti tidak dijumpai' });
+  const device = await devicesRepo.getById(deviceId);
+  if (!device || device.user_id !== userId) return res.status(404).json({ error: 'Peranti tidak dijumpai' });
 
-  dev.name = (req.body.name || dev.name).trim();
-  saveUserDevices(userId, devices);
-  res.json(dev);
+  const updated = await devicesRepo.rename(deviceId, (req.body.name || device.name).trim());
+  res.json(toApi(updated));
+});
+
+// PUT /api/devices/:deviceId/closing-bot — toggle bot auto-closing
+router.put('/:deviceId/closing-bot', async (req, res) => {
+  const userId = req.session.userId;
+  const { deviceId } = req.params;
+  const device = await devicesRepo.getById(deviceId);
+  if (!device || device.user_id !== userId) return res.status(404).json({ error: 'Peranti tidak dijumpai' });
+
+  const enabled = !!req.body.enabled;
+  if (enabled) {
+    const productsRepo = require('../repos/products');
+    const product = await productsRepo.getByDeviceId(deviceId);
+    if (!product) return res.status(400).json({ error: 'Setup produk dahulu sebelum aktifkan bot closing' });
+  }
+
+  const updated = await devicesRepo.setClosingBotEnabled(deviceId, enabled);
+  res.json(toApi(updated));
 });
 
 // POST /api/devices/meta — tambah peranti Meta API
 router.post('/meta', async (req, res) => {
   const userId = req.session.userId;
-  const devices = getUserDevices(userId);
+  const count = await devicesRepo.countForUser(userId);
 
-  if (devices.length >= MAX_DEVICES) {
+  if (count >= MAX_DEVICES) {
     return res.status(400).json({ error: `Had maksimum ${MAX_DEVICES} peranti` });
   }
 
@@ -154,25 +169,18 @@ router.post('/meta', async (req, res) => {
   }
 
   const deviceId = `dev_${Date.now()}`;
-  const deviceName = (name || `Meta API ${devices.length + 1}`).trim();
+  const deviceName = (name || `Meta API ${count + 1}`).trim();
 
   try {
     const info = await setupMetaDevice(userId, deviceId, phoneNumberId, accessToken);
-    const newDevice = {
-      id: deviceId,
-      name: deviceName,
-      type: 'meta',
-      createdAt: new Date().toISOString(),
-    };
-    devices.push(newDevice);
-    saveUserDevices(userId, devices);
+    const newDevice = await devicesRepo.create({ id: deviceId, userId, name: deviceName, type: 'meta' });
 
-    if (devices.length === 1 || !req.session.deviceId) {
+    if (count === 0 || !req.session.deviceId) {
       req.session.deviceId = deviceId;
       await new Promise(r => req.session.save(r));
     }
 
-    res.json({ ...newDevice, ...getMetaDeviceStatus(userId, deviceId), isCurrent: req.session.deviceId === deviceId, displayPhone: info.displayPhone, verifiedName: info.verifiedName });
+    res.json(toApi(newDevice, { ...getMetaDeviceStatus(userId, deviceId), isCurrent: req.session.deviceId === deviceId, displayPhone: info.displayPhone, verifiedName: info.verifiedName }));
   } catch (e) {
     res.status(400).json({ error: `Gagal verify credentials: ${e.message}` });
   }
@@ -182,12 +190,9 @@ router.post('/meta', async (req, res) => {
 router.delete('/:deviceId', async (req, res) => {
   const userId = req.session.userId;
   const { deviceId } = req.params;
-  const devices = getUserDevices(userId);
-  const idx = devices.findIndex(d => d.id === deviceId);
+  const device = await devicesRepo.getById(deviceId);
 
-  if (idx < 0) return res.status(404).json({ error: 'Peranti tidak dijumpai' });
-
-  const device = devices[idx];
+  if (!device || device.user_id !== userId) return res.status(404).json({ error: 'Peranti tidak dijumpai' });
 
   // Disconnect mengikut jenis device
   if (device.type === 'meta') {
@@ -196,16 +201,13 @@ router.delete('/:deviceId', async (req, res) => {
     await disconnectDevice(userId, deviceId).catch(() => {});
   }
 
-  // Remove from list
-  devices.splice(idx, 1);
-  saveUserDevices(userId, devices);
-
-  // Delete device data
-  deleteDeviceDir(userId, deviceId);
+  // Remove device (CASCADE buang semua data berkaitan — contacts, schedules, queue, dll)
+  await devicesRepo.remove(deviceId);
 
   // Switch current device if needed
   if (req.session.deviceId === deviceId) {
-    req.session.deviceId = devices[0]?.id || null;
+    const remaining = await devicesRepo.getForUser(userId);
+    req.session.deviceId = remaining[0]?.id || null;
     await new Promise(r => req.session.save(r));
   }
 

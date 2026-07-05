@@ -2,5 +2,7 @@ node_modules/
 backend/auth/
 backend/uploads/
 backend/data/*.json
+backend/data.pre-mysql-backup/
+backend/leads/*.xlsx
 .env
 *.log

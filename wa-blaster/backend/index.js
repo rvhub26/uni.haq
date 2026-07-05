@@ -1,11 +1,14 @@
+require('dotenv').config();
 const express = require('express');
+require('express-async-errors');
 const path = require('path');
 const session = require('express-session');
 const { PORT } = require('./config');
 const { connectDevice } = require('./whatsapp');
 const { loadMetaDevice } = require('./meta-api');
 const { restoreAllJobs } = require('./scheduler');
-const { readJSON, readUserJSON } = require('./store');
+const devicesRepo = require('./repos/devices');
+const logsRepo = require('./repos/logs');
 
 const app = express();
 app.use(express.json());
@@ -14,7 +17,7 @@ app.use(express.json());
 app.use('/api/webhook/whatsapp', require('./routes/webhook'));
 
 app.use(session({
-  secret: 'unihaq-secret-key-2026',
+  secret: process.env.SESSION_SECRET || 'unihaq-secret-key-2026',
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 },
@@ -30,9 +33,9 @@ function requireAuth(req, res, next) {
 app.use(requireAuth);
 
 // Auto-set deviceId in session if not set
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   if (req.session?.userId && !req.session.deviceId) {
-    const devices = readUserJSON(req.session.userId, 'devices.json');
+    const devices = await devicesRepo.getForUser(req.session.userId);
     if (devices.length) req.session.deviceId = devices[0].id;
   }
   next();
@@ -49,33 +52,37 @@ app.use('/api/schedules', require('./routes/schedules'));
 app.use('/api/templates', require('./routes/templates'));
 app.use('/api/blacklist', require('./routes/blacklist'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/closing-bot', require('./routes/closing-bot'));
 
-app.get('/api/logs', (req, res) => {
+app.get('/api/logs', async (req, res) => {
   if (!req.session?.deviceId) return res.json([]);
-  const { readDeviceJSON } = require('./store');
-  res.json(readDeviceJSON(req.session.userId, req.session.deviceId, 'logs.json'));
+  res.json(await logsRepo.getForDevice(req.session.deviceId));
 });
 
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
 });
 
+// Error handler global — elak crash proses bila route async throw
+app.use((err, req, res, next) => {
+  console.error(`[error] ${req.method} ${req.path}:`, err.message);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: err.message || 'Ralat server' });
+});
+
 // Connect semua devices yang dah ada untuk semua users
 async function connectAllDevices() {
-  const users = readJSON('users.json');
-  for (const user of users) {
-    const devices = readUserJSON(user.id, 'devices.json');
-    for (const device of devices) {
-      if (device.type === 'meta') {
-        loadMetaDevice(user.id, device.id);
-      } else {
-        await connectDevice(user.id, device.id).catch(e => {
-          console.error(`Gagal connect ${user.id}::${device.id}:`, e.message);
-        });
-      }
+  const devices = await devicesRepo.getAllWithUser();
+  for (const device of devices) {
+    if (device.type === 'meta') {
+      await loadMetaDevice(device.user_id, device.id);
+    } else {
+      await connectDevice(device.user_id, device.id).catch(e => {
+        console.error(`Gagal connect ${device.user_id}::${device.id}:`, e.message);
+      });
     }
   }
-  console.log(`${users.reduce((t, u) => t + readUserJSON(u.id, 'devices.json').length, 0)} device(s) dimulakan`);
+  console.log(`${devices.length} device(s) dimulakan`);
 }
 
 app.listen(PORT, async () => {

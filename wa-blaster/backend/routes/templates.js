@@ -1,57 +1,51 @@
 const router = require('express').Router();
-const { readUserJSON, writeUserJSON } = require('../store');
+const templatesRepo = require('../repos/templates');
 
-function getTemplates(userId) { return readUserJSON(userId, 'templates.json'); }
+function toApi(t) {
+  return { id: t.id, name: t.name, text: t.text, mediaFile: t.media_file, createdAt: t.created_at };
+}
 
 // Semua templates (per-user, shared across devices)
-router.get('/', (req, res) => {
-  res.json(getTemplates(req.session.userId));
+router.get('/', async (req, res) => {
+  const list = await templatesRepo.getForUser(req.session.userId);
+  res.json(list.map(toApi));
 });
 
 // Simpan template baru
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { name, text, mediaFile } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Nama template diperlukan' });
   if (!text?.trim()) return res.status(400).json({ error: 'Teks mesej diperlukan' });
 
-  const list = getTemplates(req.session.userId);
-  const tmpl = {
+  const tmpl = await templatesRepo.create(req.session.userId, {
     id: `tmpl_${Date.now()}`,
     name: name.trim(),
     text: text.trim(),
     mediaFile: mediaFile || null,
-    createdAt: new Date().toISOString(),
-  };
-  list.push(tmpl);
-  writeUserJSON(req.session.userId, 'templates.json', list);
-  res.json(tmpl);
+  });
+  res.json(toApi(tmpl));
 });
 
 // Kemaskini template
-router.put('/:id', (req, res) => {
-  const { name, text, mediaFile } = req.body;
-  const list = getTemplates(req.session.userId);
-  const idx = list.findIndex(t => t.id === req.params.id);
-  if (idx < 0) return res.status(404).json({ error: 'Template tidak dijumpai' });
+router.put('/:id', async (req, res) => {
+  const existing = await templatesRepo.getById(req.params.id);
+  if (!existing || existing.user_id !== req.session.userId) return res.status(404).json({ error: 'Template tidak dijumpai' });
 
-  list[idx] = {
-    ...list[idx],
-    name: name?.trim() || list[idx].name,
-    text: text?.trim() || list[idx].text,
-    mediaFile: mediaFile !== undefined ? mediaFile : list[idx].mediaFile,
-  };
-  writeUserJSON(req.session.userId, 'templates.json', list);
-  res.json(list[idx]);
+  const { name, text, mediaFile } = req.body;
+  const updated = await templatesRepo.update(req.params.id, {
+    name: name?.trim() || existing.name,
+    text: text?.trim() || existing.text,
+    mediaFile: mediaFile !== undefined ? mediaFile : existing.media_file,
+  });
+  res.json(toApi(updated));
 });
 
 // Buang template
-router.delete('/:id', (req, res) => {
-  const list = getTemplates(req.session.userId);
-  const filtered = list.filter(t => t.id !== req.params.id);
-  if (filtered.length === list.length) return res.status(404).json({ error: 'Template tidak dijumpai' });
-  writeUserJSON(req.session.userId, 'templates.json', filtered);
+router.delete('/:id', async (req, res) => {
+  const existing = await templatesRepo.getById(req.params.id);
+  if (!existing || existing.user_id !== req.session.userId) return res.status(404).json({ error: 'Template tidak dijumpai' });
+  await templatesRepo.remove(req.params.id);
   res.json({ ok: true });
 });
 
 module.exports = router;
-module.exports.getTemplates = getTemplates;

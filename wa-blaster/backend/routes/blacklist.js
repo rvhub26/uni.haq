@@ -1,39 +1,41 @@
 const router = require('express').Router();
-const { readDeviceJSON, writeDeviceJSON } = require('../store');
+const blacklistRepo = require('../repos/blacklist');
 
 function requireDevice(req, res, next) {
   if (!req.session.deviceId) return res.status(400).json({ error: 'Pilih peranti WhatsApp dahulu' });
   next();
 }
 
-router.get('/', requireDevice, (req, res) => {
-  const { userId, deviceId } = req.session;
-  res.json(readDeviceJSON(userId, deviceId, 'blacklist.json'));
+function toApi(b) {
+  return { telefon: b.telefon, nama: b.nama, sebab: b.sebab, addedAt: b.added_at };
+}
+
+router.get('/', requireDevice, async (req, res) => {
+  const { deviceId } = req.session;
+  const list = await blacklistRepo.getForDevice(deviceId);
+  res.json(list.map(toApi));
 });
 
-router.post('/', requireDevice, (req, res) => {
-  const { userId, deviceId } = req.session;
+router.post('/', requireDevice, async (req, res) => {
+  const { deviceId } = req.session;
   const { telefon, nama, sebab } = req.body;
   if (!telefon) return res.status(400).json({ error: 'Nombor telefon diperlukan' });
 
-  const list = readDeviceJSON(userId, deviceId, 'blacklist.json');
-  if (list.find(b => b.telefon === telefon)) {
+  const existing = await blacklistRepo.getForDevice(deviceId);
+  if (existing.find(b => b.telefon === telefon)) {
     return res.status(409).json({ error: 'Nombor ini dah dalam blacklist' });
   }
 
-  const entry = { telefon, nama: nama || '—', sebab: sebab || '', addedAt: new Date().toISOString() };
-  list.push(entry);
-  writeDeviceJSON(userId, deviceId, 'blacklist.json', list);
-  res.json(entry);
+  await blacklistRepo.add(deviceId, { telefon, nama: nama || '—', sebab: sebab || '' });
+  res.json({ telefon, nama: nama || '—', sebab: sebab || '', addedAt: new Date().toISOString() });
 });
 
-router.delete('/:telefon', requireDevice, (req, res) => {
-  const { userId, deviceId } = req.session;
+router.delete('/:telefon', requireDevice, async (req, res) => {
+  const { deviceId } = req.session;
   const telefon = decodeURIComponent(req.params.telefon);
-  const list = readDeviceJSON(userId, deviceId, 'blacklist.json');
-  const filtered = list.filter(b => b.telefon !== telefon);
-  if (filtered.length === list.length) return res.status(404).json({ error: 'Tidak dijumpai dalam blacklist' });
-  writeDeviceJSON(userId, deviceId, 'blacklist.json', filtered);
+  const existing = await blacklistRepo.getForDevice(deviceId);
+  if (!existing.find(b => b.telefon === telefon)) return res.status(404).json({ error: 'Tidak dijumpai dalam blacklist' });
+  await blacklistRepo.remove(deviceId, telefon);
   res.json({ ok: true });
 });
 

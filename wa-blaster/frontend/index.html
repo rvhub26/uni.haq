@@ -63,6 +63,10 @@
       <span class="nav-icon">📱</span>
       <span>Peranti</span>
     </a>
+    <a class="nav-item" data-tab="bot-closing">
+      <span class="nav-icon">🤖</span>
+      <span>Bot Closing</span>
+    </a>
   </nav>
 
   <!-- Status peranti ringkas (hidden elements — dikekalkan untuk JS compatibility) -->
@@ -882,18 +886,41 @@
             ? ''
             : (!d.connected ? '<a href="#" style="font-size:0.8rem;color:#22c55e;text-decoration:none;padding:5px 10px;border:1px solid #22c55e44;border-radius:6px;margin-right:4px;" data-devid="'+d.id+'" class="btn-show-pair">🔢 Kod</a>' : '')
               + (!d.connected ? '<a href="#" style="font-size:0.8rem;color:#64748b;text-decoration:none;padding:5px 10px;border:1px solid #33415544;border-radius:6px;" data-devid="'+d.id+'" class="btn-show-qr">📷 QR</a>' : '');
+          var botOn = !!d.closingBotEnabled;
+          var botToggle = '<label style="display:flex;align-items:center;gap:6px;font-size:0.75rem;color:'+(botOn?'#a855f7':'#64748b')+';cursor:pointer;white-space:nowrap;">'
+            + '🤖 Bot'
+            + '<input type="checkbox" data-devid="'+d.id+'" class="chk-bot-toggle" '+(botOn?'checked':'')+' style="accent-color:#a855f7;cursor:pointer;" />'
+            + '</label>';
+
           return '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:10px;">'
             + '<span style="width:10px;height:10px;border-radius:50%;background:'+dot+';flex-shrink:0;"></span>'
             + '<div style="flex:1;">'
             + '<div style="font-weight:600;color:#f1f5f9;">'+d.name+badge+'</div>'
             + '<div style="font-size:0.78rem;color:#64748b;">'+statusTxt+'</div>'
             + '</div>'
+            + botToggle
             + '<div style="display:flex;gap:8px;align-items:center;">'
             + actionBtns
             + '<a href="#" style="font-size:0.8rem;color:#ef4444;text-decoration:none;padding:5px 10px;border:1px solid #ef444444;border-radius:6px;" data-devid="'+d.id+'" data-devname="'+d.name+'" class="btn-del-device">🗑 Buang</a>'
             + '</div>'
             + '</div>';
         }).join('');
+
+        // Wire toggle bot closing switches
+        document.querySelectorAll('.chk-bot-toggle').forEach(function(cb) {
+          cb.addEventListener('change', function() {
+            var devId = this.getAttribute('data-devid');
+            var enabled = this.checked;
+            var self = this;
+            fetch('/api/devices/'+devId+'/closing-bot', {
+              method: 'PUT', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ enabled: enabled })
+            }).then(function(r){ return r.json(); }).then(function(data) {
+              if (data.error) { alert(data.error); self.checked = !enabled; return; }
+              _loadPerantiList();
+            }).catch(function() { self.checked = !enabled; });
+          });
+        });
 
         // Wire Pairing Code buttons
         document.querySelectorAll('.btn-show-pair').forEach(function(btn) {
@@ -1041,6 +1068,277 @@
     });
     </script>
   </div>
+
+  <!-- ══ BOT CLOSING ══ -->
+  <div id="tab-bot-closing" class="tab-panel">
+    <div class="page-header">
+      <div>
+        <h1>🤖 Bot Closing</h1>
+        <div class="page-header-sub">AI auto-closing untuk mesej masuk — setup produk & pantau prospek</div>
+      </div>
+      <select id="bc-device-select" class="input-field" style="max-width:260px;"></select>
+    </div>
+    <div class="page-content">
+
+      <div id="bc-no-device" style="display:none;" class="info-box">
+        Tiada peranti lagi. Tambah nombor di tab Peranti dahulu.
+      </div>
+
+      <div id="bc-body" style="display:none;">
+        <div class="two-col" style="margin-bottom:20px;">
+
+          <!-- Produk -->
+          <div class="card">
+            <div class="card-header" style="margin-bottom:14px;">
+              <h2>📦 Produk</h2>
+            </div>
+            <div class="form-stack">
+              <div class="field-group">
+                <label class="field-label">Nama Produk</label>
+                <input type="text" id="bc-p-nama" class="input-field" placeholder="Cth: ExamA CKM 500 PLUS" />
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                <div class="field-group">
+                  <label class="field-label">Harga 1 Botol</label>
+                  <input type="number" id="bc-p-harga1" class="input-field" step="0.01" min="0" />
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Pakej 3 Botol</label>
+                  <input type="number" id="bc-p-harga3" class="input-field" step="0.01" min="0" />
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Pakej 6 Botol</label>
+                  <input type="number" id="bc-p-harga6" class="input-field" step="0.01" min="0" />
+                </div>
+              </div>
+              <div class="field-group">
+                <label class="field-label">Nama Akaun Bank</label>
+                <input type="text" id="bc-p-namaakaun" class="input-field" placeholder="Cth: ROLE VISION SDN BHD" />
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <input type="text" id="bc-p-bank1nama" class="input-field" placeholder="Bank 1 (cth: MAYBANK)" />
+                <input type="text" id="bc-p-bank1no" class="input-field" placeholder="No Akaun Bank 1" />
+                <input type="text" id="bc-p-bank2nama" class="input-field" placeholder="Bank 2 (pilihan)" />
+                <input type="text" id="bc-p-bank2no" class="input-field" placeholder="No Akaun Bank 2" />
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:#94a3b8;">
+                <input type="checkbox" id="bc-p-cod" /> Terima COD
+              </label>
+              <button class="btn-primary" id="bc-btn-save-product">💾 Simpan Produk</button>
+            </div>
+          </div>
+
+          <!-- Settings -->
+          <div class="card">
+            <div class="card-header" style="margin-bottom:14px;">
+              <h2>⚙️ Settings Bot</h2>
+            </div>
+            <div class="form-stack">
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:#94a3b8;">
+                <input type="checkbox" id="bc-s-aibrain" /> AI Brain (Claude) — kalau tak ON, guna decision-tree biasa
+              </label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="field-group">
+                  <label class="field-label">Bot Tidur Dari</label>
+                  <input type="time" id="bc-s-sleepstart" class="input-field" />
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Sampai</label>
+                  <input type="time" id="bc-s-sleepend" class="input-field" />
+                </div>
+              </div>
+              <div class="field-group">
+                <label class="field-label">Telegram Bot Token <span style="font-weight:400;color:#94a3b8;">(pilihan)</span></label>
+                <input type="text" id="bc-s-tgtoken" class="input-field" placeholder="Untuk notif order baru" />
+              </div>
+              <div class="field-group">
+                <label class="field-label">Telegram Chat ID</label>
+                <input type="text" id="bc-s-tgchatid" class="input-field" />
+              </div>
+              <button class="btn-primary" id="bc-btn-save-settings">💾 Simpan Settings</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Prospects -->
+        <div class="card">
+          <div class="card-header" style="margin-bottom:12px;">
+            <h2>💬 Prospek <span class="count-badge" id="bc-prospect-count">0</span></h2>
+            <button class="btn-secondary" id="bc-btn-refresh-prospects">↺ Refresh</button>
+          </div>
+          <div id="bc-prospects-list"><p class="empty-pick">Tiada prospek lagi</p></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Conversation viewer modal -->
+  <div id="bc-conv-modal" style="display:none;position:fixed;inset:0;background:#00000090;z-index:9996;align-items:center;justify-content:center;">
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:24px;width:100%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h2 id="bc-conv-title" style="color:#f1f5f9;font-size:1rem;">Perbualan</h2>
+        <button id="bc-conv-close" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;">✕</button>
+      </div>
+      <div id="bc-conv-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var bcDeviceId = null;
+    var bcDevices = [];
+
+    async function bcLoadDevices() {
+      bcDevices = await fetch('/api/devices').then(function(r){ return r.json(); }).catch(function(){ return []; });
+      var sel = document.getElementById('bc-device-select');
+      if (!bcDevices.length) {
+        document.getElementById('bc-no-device').style.display = 'block';
+        document.getElementById('bc-body').style.display = 'none';
+        sel.innerHTML = '';
+        return;
+      }
+      document.getElementById('bc-no-device').style.display = 'none';
+      document.getElementById('bc-body').style.display = 'block';
+      sel.innerHTML = bcDevices.map(function(d) {
+        return '<option value="'+d.id+'">'+escHtml(d.name)+(d.closingBotEnabled ? ' 🤖' : '')+'</option>';
+      }).join('');
+      if (!bcDeviceId || !bcDevices.find(function(d){ return d.id === bcDeviceId; })) {
+        bcDeviceId = bcDevices[0].id;
+      }
+      sel.value = bcDeviceId;
+      await bcLoadAll();
+    }
+
+    async function bcLoadAll() {
+      if (!bcDeviceId) return;
+      await Promise.all([bcLoadProduct(), bcLoadSettings(), bcLoadProspects()]);
+    }
+
+    async function bcLoadProduct() {
+      var p = await fetch('/api/closing-bot/'+bcDeviceId+'/product').then(function(r){ return r.json(); }).catch(function(){ return null; });
+      document.getElementById('bc-p-nama').value = p ? p.namaProduk || '' : '';
+      document.getElementById('bc-p-harga1').value = p ? p.harga1 || '' : '';
+      document.getElementById('bc-p-harga3').value = p ? p.hargaPakej3 || '' : '';
+      document.getElementById('bc-p-harga6').value = p ? p.hargaPakej6 || '' : '';
+      document.getElementById('bc-p-namaakaun').value = p ? p.namaAkaun || '' : '';
+      document.getElementById('bc-p-bank1nama').value = p ? p.bank1Nama || '' : '';
+      document.getElementById('bc-p-bank1no').value = p ? p.bank1No || '' : '';
+      document.getElementById('bc-p-bank2nama').value = p ? p.bank2Nama || '' : '';
+      document.getElementById('bc-p-bank2no').value = p ? p.bank2No || '' : '';
+      document.getElementById('bc-p-cod').checked = p ? !!p.codEnabled : true;
+    }
+
+    async function bcLoadSettings() {
+      var s = await fetch('/api/closing-bot/'+bcDeviceId+'/settings').then(function(r){ return r.json(); }).catch(function(){ return null; });
+      document.getElementById('bc-s-aibrain').checked = s ? !!s.aiBrainEnabled : false;
+      document.getElementById('bc-s-sleepstart').value = s && s.botSleepStart ? s.botSleepStart.slice(0,5) : '00:00';
+      document.getElementById('bc-s-sleepend').value = s && s.botSleepEnd ? s.botSleepEnd.slice(0,5) : '07:00';
+      document.getElementById('bc-s-tgtoken').value = s ? s.telegramBotToken || '' : '';
+      document.getElementById('bc-s-tgchatid').value = s ? s.telegramChatId || '' : '';
+    }
+
+    var TEMP_COLOR = { HOT: '#ef4444', WARM: '#f59e0b', COLD: '#3b82f6' };
+
+    async function bcLoadProspects() {
+      var list = await fetch('/api/closing-bot/'+bcDeviceId+'/prospects').then(function(r){ return r.json(); }).catch(function(){ return []; });
+      document.getElementById('bc-prospect-count').textContent = list.length;
+      var el = document.getElementById('bc-prospects-list');
+      if (!list.length) { el.innerHTML = '<p class="empty-pick">Tiada prospek lagi</p>'; return; }
+
+      el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + list.map(function(p) {
+        var tc = TEMP_COLOR[p.temperature] || '#64748b';
+        return '<div class="bc-prospect-row" data-pid="'+p.id+'" data-phone="'+escHtml(p.phoneNumber)+'" style="cursor:pointer;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;display:flex;align-items:center;gap:10px;">'
+          + '<span style="width:8px;height:8px;border-radius:50%;background:'+tc+';flex-shrink:0;"></span>'
+          + '<div style="flex:1;min-width:0;">'
+          + '<div style="color:#f1f5f9;font-weight:600;font-size:0.88rem;">'+escHtml(p.phoneNumber)+'</div>'
+          + '<div style="font-size:0.75rem;color:#64748b;">Angle: '+(p.angle||'—')+' · Step: '+p.currentStep+' · Status: '+p.status+'</div>'
+          + '</div>'
+          + '<span style="font-size:0.7rem;color:'+tc+';border:1px solid '+tc+'55;padding:2px 8px;border-radius:10px;">'+(p.temperature||'—')+'</span>'
+          + '</div>';
+      }).join('') + '</div>';
+
+      document.querySelectorAll('.bc-prospect-row').forEach(function(row) {
+        row.addEventListener('click', function() {
+          bcOpenConversation(this.getAttribute('data-pid'), this.getAttribute('data-phone'));
+        });
+      });
+    }
+
+    async function bcOpenConversation(prospectId, phone) {
+      document.getElementById('bc-conv-title').textContent = 'Perbualan — ' + phone;
+      var body = document.getElementById('bc-conv-body');
+      body.innerHTML = '<p class="empty-pick">Memuatkan...</p>';
+      document.getElementById('bc-conv-modal').style.display = 'flex';
+
+      var conv = await fetch('/api/closing-bot/'+bcDeviceId+'/prospects/'+prospectId+'/conversations').then(function(r){ return r.json(); }).catch(function(){ return []; });
+      if (!conv.length) { body.innerHTML = '<p class="empty-pick">Tiada mesej lagi</p>'; return; }
+
+      body.innerHTML = conv.map(function(c) {
+        var isIn = c.direction === 'inbound';
+        return '<div style="align-self:'+(isIn?'flex-start':'flex-end')+';max-width:80%;background:'+(isIn?'#334155':'#22c55e22')+';color:#f1f5f9;padding:8px 12px;border-radius:10px;font-size:0.85rem;">'
+          + escHtml(c.message || '['+c.messageType+']')
+          + '<div style="font-size:0.68rem;color:#94a3b8;margin-top:4px;">'+new Date(c.createdAt).toLocaleString('ms-MY')+'</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    document.getElementById('bc-conv-close').addEventListener('click', function() {
+      document.getElementById('bc-conv-modal').style.display = 'none';
+    });
+
+    document.getElementById('bc-device-select').addEventListener('change', function() {
+      bcDeviceId = this.value;
+      bcLoadAll();
+    });
+
+    document.getElementById('bc-btn-save-product').addEventListener('click', function() {
+      var nama = document.getElementById('bc-p-nama').value.trim();
+      if (!nama) { alert('Nama produk diperlukan'); return; }
+      fetch('/api/closing-bot/'+bcDeviceId+'/product', {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          namaProduk: nama,
+          harga1: parseFloat(document.getElementById('bc-p-harga1').value) || 0,
+          hargaPakej3: parseFloat(document.getElementById('bc-p-harga3').value) || 0,
+          hargaPakej6: parseFloat(document.getElementById('bc-p-harga6').value) || 0,
+          namaAkaun: document.getElementById('bc-p-namaakaun').value.trim(),
+          bank1Nama: document.getElementById('bc-p-bank1nama').value.trim(),
+          bank1No: document.getElementById('bc-p-bank1no').value.trim(),
+          bank2Nama: document.getElementById('bc-p-bank2nama').value.trim(),
+          bank2No: document.getElementById('bc-p-bank2no').value.trim(),
+          codEnabled: document.getElementById('bc-p-cod').checked,
+        })
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        if (typeof showToast === 'function') showToast('Produk disimpan');
+      });
+    });
+
+    document.getElementById('bc-btn-save-settings').addEventListener('click', function() {
+      fetch('/api/closing-bot/'+bcDeviceId+'/settings', {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          aiBrainEnabled: document.getElementById('bc-s-aibrain').checked,
+          botSleepStart: document.getElementById('bc-s-sleepstart').value + ':00',
+          botSleepEnd: document.getElementById('bc-s-sleepend').value + ':00',
+          telegramBotToken: document.getElementById('bc-s-tgtoken').value.trim(),
+          telegramChatId: document.getElementById('bc-s-tgchatid').value.trim(),
+        })
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        if (typeof showToast === 'function') showToast('Settings disimpan');
+      });
+    });
+
+    document.getElementById('bc-btn-refresh-prospects').addEventListener('click', bcLoadProspects);
+
+    document.querySelector('[data-tab="bot-closing"]').addEventListener('click', function() {
+      setTimeout(bcLoadDevices, 100);
+    });
+  })();
+  </script>
 
 </main>
 
