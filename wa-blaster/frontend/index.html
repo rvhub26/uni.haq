@@ -34,43 +34,55 @@
   <!-- Scrollable area: nav + device selector -->
   <div class="sidebar-scroll">
   <nav class="nav-section">
-    <div class="nav-section-label">UniBlast</div>
-    <a class="nav-item active" data-tab="dashboard">
-      <span class="nav-icon">🏠</span>
-      <span>Dashboard</span>
-    </a>
-    <a class="nav-item" data-tab="contacts">
-      <span class="nav-icon">👥</span>
-      <span>Contacts</span>
-    </a>
-    <a class="nav-item" data-tab="templates">
-      <span class="nav-icon">📝</span>
-      <span>Templates</span>
-    </a>
-    <a class="nav-item" data-tab="jadual">
-      <span class="nav-icon">📅</span>
-      <span>Jadual Blast</span>
-    </a>
-    <a class="nav-item" data-tab="queue">
-      <span class="nav-icon">⏳</span>
-      <span>Queue &amp; Log</span>
-    </a>
-    <a class="nav-item" data-tab="laporan">
-      <span class="nav-icon">📊</span>
-      <span>Laporan</span>
-    </a>
-    <a class="nav-item" data-tab="peranti">
-      <span class="nav-icon">📱</span>
-      <span>Peranti</span>
-    </a>
-  </nav>
+    <div class="nav-group" data-group="uniblast">
+      <div class="nav-group-header" onclick="toggleNavGroup('uniblast')">
+        <span class="nav-group-title">🚀 UniBlast</span>
+        <span class="nav-group-chevron" id="chevron-uniblast">▾</span>
+      </div>
+      <div class="nav-group-items" id="navgroup-uniblast">
+        <a class="nav-item active" data-tab="dashboard">
+          <span class="nav-icon">🏠</span>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-item" data-tab="contacts">
+          <span class="nav-icon">👥</span>
+          <span>Contacts</span>
+        </a>
+        <a class="nav-item" data-tab="templates">
+          <span class="nav-icon">📝</span>
+          <span>Templates</span>
+        </a>
+        <a class="nav-item" data-tab="jadual">
+          <span class="nav-icon">📅</span>
+          <span>Jadual Blast</span>
+        </a>
+        <a class="nav-item" data-tab="queue">
+          <span class="nav-icon">⏳</span>
+          <span>Queue &amp; Log</span>
+        </a>
+        <a class="nav-item" data-tab="laporan">
+          <span class="nav-icon">📊</span>
+          <span>Laporan</span>
+        </a>
+        <a class="nav-item" data-tab="peranti">
+          <span class="nav-icon">📱</span>
+          <span>Peranti</span>
+        </a>
+      </div>
+    </div>
 
-  <nav class="nav-section">
-    <div class="nav-section-label">UniBot</div>
-    <a class="nav-item" data-tab="bot-closing">
-      <span class="nav-icon">🤖</span>
-      <span>UniBot</span>
-    </a>
+    <div class="nav-group" data-group="unibot">
+      <div class="nav-group-header" onclick="toggleNavGroup('unibot')">
+        <span class="nav-group-title">🤖 UniBot</span>
+        <span class="nav-group-chevron" id="chevron-unibot">▸</span>
+      </div>
+      <div class="nav-group-items collapsed" id="navgroup-unibot">
+        <a class="nav-item" data-tab="bot-closing">
+          <span class="nav-icon">🤖</span>
+          <span>UniBot</span>
+        </a>
+      </div>
+    </div>
   </nav>
 
   <!-- Status peranti ringkas (hidden elements — dikekalkan untuk JS compatibility) -->

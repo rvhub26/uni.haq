@@ -108,6 +108,37 @@ body {
   padding: 10px 8px 6px;
 }
 
+.nav-group { margin-bottom: 4px; }
+.nav-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+}
+.nav-group-header:hover { background: var(--bg-3); }
+.nav-group-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #cbd5e1;
+}
+.nav-group-chevron {
+  font-size: 0.7rem;
+  color: #5a7a96;
+  transition: transform var(--transition);
+}
+.nav-group-items {
+  overflow: hidden;
+  max-height: 500px;
+  transition: max-height 0.25s ease;
+  padding-top: 2px;
+}
+.nav-group-items.collapsed { max-height: 0; }
+
 .nav-item {
   display: flex;
   align-items: center;

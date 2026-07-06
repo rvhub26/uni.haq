@@ -118,11 +118,42 @@ async function deleteUser(id, username) {
 }
 
 // ── Tab navigation ────────────────────────────────────
+const TAB_GROUP = {
+  dashboard: 'uniblast', contacts: 'uniblast', templates: 'uniblast', jadual: 'uniblast',
+  queue: 'uniblast', laporan: 'uniblast', peranti: 'uniblast',
+  'bot-closing': 'unibot',
+};
+
+function toggleNavGroup(name) {
+  ['uniblast', 'unibot'].forEach(g => {
+    const items = document.getElementById(`navgroup-${g}`);
+    const chevron = document.getElementById(`chevron-${g}`);
+    if (!items || !chevron) return;
+    const shouldExpand = g === name ? items.classList.contains('collapsed') : false;
+    items.classList.toggle('collapsed', !shouldExpand);
+    chevron.textContent = shouldExpand ? '▾' : '▸';
+  });
+}
+
+function expandNavGroupFor(tabName) {
+  const group = TAB_GROUP[tabName];
+  if (!group) return;
+  ['uniblast', 'unibot'].forEach(g => {
+    const items = document.getElementById(`navgroup-${g}`);
+    const chevron = document.getElementById(`chevron-${g}`);
+    if (!items || !chevron) return;
+    const expand = g === group;
+    items.classList.toggle('collapsed', !expand);
+    chevron.textContent = expand ? '▾' : '▸';
+  });
+}
+
 function switchTab(tabName) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`tab-${tabName}`)?.classList.add('active');
   document.querySelector(`.nav-item[data-tab="${tabName}"]`)?.classList.add('active');
+  expandNavGroupFor(tabName);
   if (tabName === 'laporan') loadLaporan();
 }
 
