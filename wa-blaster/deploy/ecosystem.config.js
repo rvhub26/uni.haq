@@ -9,10 +9,9 @@ module.exports = {
     max_memory_restart: '500M',
     env: {
       NODE_ENV: 'production',
-      PORT: 3001,
+      PORT: 3002,
     },
     error_file: '/var/log/unihaq-error.log',
     out_file: '/var/log/unihaq-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss',
   }],
 };

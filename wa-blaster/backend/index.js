@@ -1,7 +1,7 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 require('express-async-errors');
-const path = require('path');
 const session = require('express-session');
 const { PORT } = require('./config');
 const { connectDevice } = require('./whatsapp');
