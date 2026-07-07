@@ -125,7 +125,7 @@ const TAB_GROUP = {
 };
 
 function toggleNavGroup(name) {
-  ['uniblast', 'unibot'].forEach(g => {
+  ['uniblast', 'unibot', 'webpro'].forEach(g => {
     const items = document.getElementById(`navgroup-${g}`);
     const chevron = document.getElementById(`chevron-${g}`);
     if (!items || !chevron) return;
@@ -138,7 +138,7 @@ function toggleNavGroup(name) {
 function expandNavGroupFor(tabName) {
   const group = TAB_GROUP[tabName];
   if (!group) return;
-  ['uniblast', 'unibot'].forEach(g => {
+  ['uniblast', 'unibot', 'webpro'].forEach(g => {
     const items = document.getElementById(`navgroup-${g}`);
     const chevron = document.getElementById(`chevron-${g}`);
     if (!items || !chevron) return;
