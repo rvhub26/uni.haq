@@ -1124,7 +1124,7 @@
             <div class="form-stack">
               <div class="field-group">
                 <label class="field-label">Nama Produk</label>
-                <input type="text" id="bc-p-nama" class="input-field" placeholder="Cth: ExamA CKM 500 PLUS" />
+                <input type="text" id="bc-p-nama" class="input-field" placeholder="Cth: Resno" />
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
                 <div class="field-group">
@@ -1132,11 +1132,11 @@
                   <input type="number" id="bc-p-harga1" class="input-field" step="0.01" min="0" />
                 </div>
                 <div class="field-group">
-                  <label class="field-label">Pakej 3 Botol</label>
+                  <label class="field-label">Pakej 2 Botol</label>
                   <input type="number" id="bc-p-harga3" class="input-field" step="0.01" min="0" />
                 </div>
                 <div class="field-group">
-                  <label class="field-label">Pakej 6 Botol</label>
+                  <label class="field-label">Pakej 3 Botol</label>
                   <input type="number" id="bc-p-harga6" class="input-field" step="0.01" min="0" />
                 </div>
               </div>
@@ -1190,6 +1190,15 @@
 
         </div>
 
+        <!-- Gambar Produk -->
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-header" style="margin-bottom:14px;">
+            <h2>🖼️ Gambar Produk</h2>
+          </div>
+          <div class="page-header-sub" style="margin-bottom:12px;">Semua gambar pilihan sahaja — bot skip senyap kalau tiada. Jangan upload gambar sijil KKM/Halal kalau belum sah.</div>
+          <div id="bc-img-slots" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"></div>
+        </div>
+
         <!-- Prospects -->
         <div class="card">
           <div class="card-header" style="margin-bottom:12px;">
@@ -1218,6 +1227,67 @@
   (function() {
     var bcDeviceId = null;
     var bcDevices = [];
+    var bcImages = {};
+
+    var IMAGE_SLOTS = [
+      { key: 'gambarProduk', label: 'Gambar Produk' },
+      { key: 'gambarTestimoni1', label: 'Testimoni 1' },
+      { key: 'gambarTestimoni2', label: 'Testimoni 2' },
+      { key: 'gambarTestimoni3', label: 'Testimoni 3' },
+      { key: 'gambarIngredient', label: 'Gambar Bahan/Ingredient' },
+      { key: 'gambarKkm', label: 'Sijil KKM/Halal' },
+      { key: 'gambarKajian', label: 'Gambar Kajian Saintifik' },
+    ];
+
+    function renderImageSlots() {
+      var el = document.getElementById('bc-img-slots');
+      el.innerHTML = IMAGE_SLOTS.map(function(slot) {
+        var filename = bcImages[slot.key];
+        return '<div class="field-group">'
+          + '<label class="field-label">' + slot.label + '</label>'
+          + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+          + '<input type="file" accept="image/*" data-slot="' + slot.key + '" class="bc-img-input" style="display:none;" />'
+          + '<button type="button" class="btn-secondary bc-img-pick" data-slot="' + slot.key + '">📎 ' + (filename ? 'Tukar' : 'Upload') + '</button>'
+          + '<span style="font-size:0.78rem;color:#94a3b8;">' + (filename ? '✓ ' + escHtml(filename) : 'Tiada') + '</span>'
+          + (filename ? '<button type="button" class="bc-img-remove" data-slot="' + slot.key + '" style="background:none;border:none;color:#ef4444;cursor:pointer;">✕</button>' : '')
+          + '</div></div>';
+      }).join('');
+
+      el.querySelectorAll('.bc-img-pick').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          el.querySelector('.bc-img-input[data-slot="' + this.getAttribute('data-slot') + '"]').click();
+        });
+      });
+
+      el.querySelectorAll('.bc-img-input').forEach(function(input) {
+        input.addEventListener('change', async function(e) {
+          var file = e.target.files[0]; if (!file) return;
+          var slot = this.getAttribute('data-slot');
+          var fd = new FormData(); fd.append('file', file);
+          try {
+            var res = await fetch('/api/media/upload', { method: 'POST', body: fd });
+            var data = await res.json();
+            if (!res.ok) { if (typeof showToast === 'function') showToast(data.error, 'error'); return; }
+            var old = bcImages[slot];
+            bcImages[slot] = data.filename;
+            renderImageSlots();
+            if (old) await fetch('/api/media/' + old, { method: 'DELETE' }).catch(function(){});
+            if (typeof showToast === 'function') showToast('Gambar diupload — jangan lupa Simpan Produk');
+          } catch { if (typeof showToast === 'function') showToast('Ralat upload gambar', 'error'); }
+        });
+      });
+
+      el.querySelectorAll('.bc-img-remove').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          var slot = this.getAttribute('data-slot');
+          var filename = bcImages[slot];
+          delete bcImages[slot];
+          renderImageSlots();
+          if (filename) await fetch('/api/media/' + filename, { method: 'DELETE' }).catch(function(){});
+          if (typeof showToast === 'function') showToast('Gambar dibuang — jangan lupa Simpan Produk');
+        });
+      });
+    }
 
     async function bcLoadDevices() {
       bcDevices = await fetch('/api/devices').then(function(r){ return r.json(); }).catch(function(){ return []; });
@@ -1249,14 +1319,20 @@
       var p = await fetch('/api/closing-bot/'+bcDeviceId+'/product').then(function(r){ return r.json(); }).catch(function(){ return null; });
       document.getElementById('bc-p-nama').value = p ? p.namaProduk || '' : '';
       document.getElementById('bc-p-harga1').value = p ? p.harga1 || '' : '';
-      document.getElementById('bc-p-harga3').value = p ? p.hargaPakej3 || '' : '';
-      document.getElementById('bc-p-harga6').value = p ? p.hargaPakej6 || '' : '';
+      document.getElementById('bc-p-harga3').value = p ? p.hargaPakej2 || '' : '';
+      document.getElementById('bc-p-harga6').value = p ? p.hargaPakej3 || '' : '';
       document.getElementById('bc-p-namaakaun').value = p ? p.namaAkaun || '' : '';
       document.getElementById('bc-p-bank1nama').value = p ? p.bank1Nama || '' : '';
       document.getElementById('bc-p-bank1no').value = p ? p.bank1No || '' : '';
       document.getElementById('bc-p-bank2nama').value = p ? p.bank2Nama || '' : '';
       document.getElementById('bc-p-bank2no').value = p ? p.bank2No || '' : '';
       document.getElementById('bc-p-cod').checked = p ? !!p.codEnabled : true;
+
+      bcImages = {};
+      IMAGE_SLOTS.forEach(function(slot) {
+        if (p && p[slot.key]) bcImages[slot.key] = p[slot.key];
+      });
+      renderImageSlots();
     }
 
     async function bcLoadSettings() {
@@ -1330,14 +1406,21 @@
         body: JSON.stringify({
           namaProduk: nama,
           harga1: parseFloat(document.getElementById('bc-p-harga1').value) || 0,
-          hargaPakej3: parseFloat(document.getElementById('bc-p-harga3').value) || 0,
-          hargaPakej6: parseFloat(document.getElementById('bc-p-harga6').value) || 0,
+          hargaPakej2: parseFloat(document.getElementById('bc-p-harga3').value) || 0,
+          hargaPakej3: parseFloat(document.getElementById('bc-p-harga6').value) || 0,
           namaAkaun: document.getElementById('bc-p-namaakaun').value.trim(),
           bank1Nama: document.getElementById('bc-p-bank1nama').value.trim(),
           bank1No: document.getElementById('bc-p-bank1no').value.trim(),
           bank2Nama: document.getElementById('bc-p-bank2nama').value.trim(),
           bank2No: document.getElementById('bc-p-bank2no').value.trim(),
           codEnabled: document.getElementById('bc-p-cod').checked,
+          gambarProduk: bcImages.gambarProduk || null,
+          gambarTestimoni1: bcImages.gambarTestimoni1 || null,
+          gambarTestimoni2: bcImages.gambarTestimoni2 || null,
+          gambarTestimoni3: bcImages.gambarTestimoni3 || null,
+          gambarIngredient: bcImages.gambarIngredient || null,
+          gambarKkm: bcImages.gambarKkm || null,
+          gambarKajian: bcImages.gambarKajian || null,
         })
       }).then(function(r){ return r.json(); }).then(function(data) {
         if (data.error) { alert(data.error); return; }

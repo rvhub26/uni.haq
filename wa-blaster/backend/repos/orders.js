@@ -1,6 +1,6 @@
 const db = require('../db');
 
-const PAKEJ_QTY = { '1_botol': 1, '3_botol': 3, '6_botol': 6 };
+const PAKEJ_QTY = { '1_botol': 1, '2_botol': 2, '3_botol': 3 };
 
 async function create(prospectId, deviceId, productId, pakej, totalPrice, paymentMethod) {
   const [result] = await db.query(

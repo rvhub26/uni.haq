@@ -40,8 +40,7 @@ async function handleIncoming(userId, deviceId, message) {
     const aiResponse = await aiBrain.getAIResponse(history, {
       angle: prospect.angle,
       current_step: prospect.current_step,
-      nama_anak: prospect.nama_anak,
-      umur_anak: prospect.umur_anak,
+      tempoh_masalah: prospect.tempoh_masalah,
       status: prospect.status,
       lastMessage: text,
     });

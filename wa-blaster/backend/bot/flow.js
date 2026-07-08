@@ -103,8 +103,8 @@ async function handleDetectAngle(userId, deviceId, prospect, text, product) {
   if (!angle) {
     // Tak detect angle — tanya terus
     await sendMessages(userId, deviceId, prospect.phone_number, [
-      'Terima kasih contact Zia☺️',
-      'Zia nak tahu, anak akak ada masalah apa sekarang? Susah fokus belajar, atau ada masalah lain?',
+      'Terima kasih contact Aina☺️',
+      'Aina nak tahu, apa masalah utama awak sekarang? Sendi rasa kaku, tenaga rendah, atau ada masalah lain?',
     ]);
     return;
   }
@@ -120,19 +120,13 @@ async function handleDetectAngle(userId, deviceId, prospect, text, product) {
 async function handleFactFinding(userId, deviceId, prospect, text) {
   const angle = prospect.angle;
 
-  // Cuba extract darjah/umur dari teks
-  const darjahMatch = text.match(/darjah\s*(\d+)|standard\s*(\d+)/i);
-  const umurMatch = text.match(/(\d+)\s*(tahun|thn|th)/i);
+  // Cuba extract tempoh masalah dari teks (cth: "3 bulan", "setahun")
+  const tempohMatch = text.match(/(\d+)\s*(hari|minggu|bulan|tahun|thn)/i);
+  const tempoh = tempohMatch ? `${tempohMatch[1]} ${tempohMatch[2]}` : null;
 
-  const darjah = darjahMatch ? (darjahMatch[1] || darjahMatch[2]) : null;
-  const umur = umurMatch ? umurMatch[1] : null;
+  if (tempoh) await prospectsRepo.updateFields(deviceId, prospect.phone_number, { tempoh_masalah: tempoh });
 
-  const fields = {};
-  if (darjah) fields.darjah_anak = darjah;
-  if (umur) fields.umur_anak = umur;
-  if (Object.keys(fields).length) await prospectsRepo.updateFields(deviceId, prospect.phone_number, fields);
-
-  const factFindingMsgs = msg[angle].factFinding(darjah);
+  const factFindingMsgs = msg[angle].factFinding(tempoh);
   await sendMessages(userId, deviceId, prospect.phone_number, factFindingMsgs);
   await prospectsRepo.updateStep(deviceId, prospect.phone_number, 'korek_masalah');
 }
@@ -147,16 +141,19 @@ async function handleKorekMasalah(userId, deviceId, prospect, text) {
 
 async function handleFearAmplification(userId, deviceId, prospect, text) {
   const angle = prospect.angle;
-  const darjah = prospect.darjah_anak;
+  const tempoh = prospect.tempoh_masalah;
 
-  await sendMessages(userId, deviceId, prospect.phone_number, msg[angle].fearAmplification(darjah));
+  await sendMessages(userId, deviceId, prospect.phone_number, msg[angle].fearAmplification(tempoh));
   await prospectsRepo.updateStep(deviceId, prospect.phone_number, 'tanya_ikhtiar');
 }
 
+const IKHTIAR_LAIN_KEYWORDS = ['urut', 'pil', 'ubat', 'panadol', 'koyok', 'minyak', 'krim', 'fisio', 'kopi', 'suplemen lain', 'vitamin lain'];
+
 async function handleTanyaIkhtiar(userId, deviceId, prospect, text) {
+  const angle = prospect.angle;
   const mention = text.toLowerCase();
-  if (mention.includes('tuisyen') || mention.includes('tuition') || mention.includes('kelas')) {
-    await sendMessages(userId, deviceId, prospect.phone_number, msg.fokus.responseIkhtiarTuisyen());
+  if (IKHTIAR_LAIN_KEYWORDS.some(kw => mention.includes(kw))) {
+    await sendMessages(userId, deviceId, prospect.phone_number, msg[angle].responseIkhtiarLain());
   }
 
   await sendMessages(userId, deviceId, prospect.phone_number, msg.introSolution());
@@ -176,10 +173,10 @@ async function handleIntroSolution(userId, deviceId, prospect, text) {
       await sendMessages(userId, deviceId, prospect.phone_number, solutionResponse);
     }
 
-    await sendMessages(userId, deviceId, prospect.phone_number, msg.uspExama());
+    await sendMessages(userId, deviceId, prospect.phone_number, msg.uspResno());
     await prospectsRepo.updateStep(deviceId, prospect.phone_number, 'usp');
   } else {
-    await sendMessages(userId, deviceId, prospect.phone_number, msg.uspExama());
+    await sendMessages(userId, deviceId, prospect.phone_number, msg.uspResno());
     await prospectsRepo.updateStep(deviceId, prospect.phone_number, 'usp');
   }
 }
@@ -247,8 +244,8 @@ async function handleAskPayment(userId, deviceId, prospect, text, product) {
 
   let pakej = '1_botol';
   let totalPrice = product.harga_1;
+  if (lower.includes('2') || lower.includes('dua')) { pakej = '2_botol'; totalPrice = product.harga_pakej_2; }
   if (lower.includes('3') || lower.includes('tiga')) { pakej = '3_botol'; totalPrice = product.harga_pakej_3; }
-  if (lower.includes('6') || lower.includes('enam')) { pakej = '6_botol'; totalPrice = product.harga_pakej_6; }
 
   const orderId = await ordersRepo.create(
     prospect.id, deviceId, product.id, pakej, totalPrice,

@@ -25,15 +25,15 @@ async function notifyNewOrder(prospect, order, product, settings = null) {
 
   const pakejLabel = {
     '1_botol': '1 Botol',
+    '2_botol': 'Pakej 2 Botol',
     '3_botol': 'Pakej 3 Botol',
-    '6_botol': 'Pakej 6 Botol',
   };
 
   const text = `🔔 <b>ORDER BARU MASUK!</b>
 
 👤 Nama: ${prospect.nama || '-'}
 📱 No Fon: ${prospect.phone_number}
-📦 Produk: ${product?.nama_produk || 'Exama'} — ${pakejLabel[order?.pakej] || '-'}
+📦 Produk: ${product?.nama_produk || 'Resno'} — ${pakejLabel[order?.pakej] || '-'}
 💰 Total: RM${order?.total_price || '-'}
 🏦 Payment: ${order?.payment_method?.toUpperCase() || '-'}
 🏠 Alamat: ${order?.delivery_address || 'COD — tunggu details'}
@@ -58,7 +58,7 @@ async function sendDailyReport(stats, adSpend, settings = null) {
   const closingRate = total > 0 ? ((close / total) * 100).toFixed(1) : '0.0';
   const roi = spend > 0 ? (sales / spend).toFixed(2) : 'N/A';
 
-  const text = `📊 <b>LAPORAN ZIABOT</b>
+  const text = `📊 <b>LAPORAN UNIBOT</b>
 📅 ${new Date().toLocaleDateString('ms-MY')}
 
 ———————————————

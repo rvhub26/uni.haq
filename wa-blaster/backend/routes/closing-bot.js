@@ -16,7 +16,7 @@ function toProductApi(p) {
   if (!p) return null;
   return {
     id: p.id, deviceId: p.device_id, namaProduk: p.nama_produk,
-    harga1: p.harga_1, hargaPakej3: p.harga_pakej_3, hargaPakej6: p.harga_pakej_6,
+    harga1: p.harga_1, hargaPakej2: p.harga_pakej_2, hargaPakej3: p.harga_pakej_3,
     namaAkaun: p.nama_akaun, bank1Nama: p.bank_1_nama, bank1No: p.bank_1_no,
     bank2Nama: p.bank_2_nama, bank2No: p.bank_2_no, codEnabled: !!p.cod_enabled,
     gambarProduk: p.gambar_produk, gambarTestimoni1: p.gambar_testimoni_1,
@@ -59,7 +59,7 @@ router.put('/:deviceId/product', requireOwnedDevice, async (req, res) => {
 
   const fields = {};
   const map = {
-    namaProduk: 'nama_produk', harga1: 'harga_1', hargaPakej3: 'harga_pakej_3', hargaPakej6: 'harga_pakej_6',
+    namaProduk: 'nama_produk', harga1: 'harga_1', hargaPakej2: 'harga_pakej_2', hargaPakej3: 'harga_pakej_3',
     namaAkaun: 'nama_akaun', bank1Nama: 'bank_1_nama', bank1No: 'bank_1_no',
     bank2Nama: 'bank_2_nama', bank2No: 'bank_2_no', codEnabled: 'cod_enabled',
     gambarProduk: 'gambar_produk', gambarTestimoni1: 'gambar_testimoni_1',

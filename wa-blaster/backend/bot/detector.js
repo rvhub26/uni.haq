@@ -3,11 +3,9 @@
 // ============================================================
 
 const ANGLE_KEYWORDS = {
-  fokus: ['fokus', 'focus', 'distracted', 'tidak fokus', 'susah fokus', 'tak fokus', 'tak tumpuan', 'tak concentrate'],
-  exam:  ['exam', 'periksa', 'skor', 'score', 'markah', 'result', 'keputusan', 'upsr', 'pt3', 'spm', 'ujian', 'peperiksaan'],
-  pagi:  ['bangun', 'pagi', 'sekolah', 'lewat', 'mengantuk', 'tidur', 'ngantuk', 'malas bangun'],
-  baca:  ['baca', 'membaca', 'lancar', 'huruf', 'mengeja', 'eja', 'tak lancar', 'lambat baca'],
-  lupa:  ['lupa', 'ingat', 'hafal', 'blank', 'ingatan', 'memori', 'mudah lupa', 'susah ingat', 'hafalan'],
+  kaku:   ['kaku', 'sendi', 'lutut', 'sakit sendi', 'sengal', 'bengkak', 'sukar bergerak', 'tulang', 'stiff'],
+  tenaga: ['tenaga', 'penat', 'letih', 'lesu', 'stamina', 'tak larat', 'cepat penat', 'tak bertenaga', 'mengantuk sepanjang hari'],
+  rutin:  ['dah cuba', 'banyak produk', 'tak konsisten', 'x konsisten', 'lupa nak makan', 'rumit', 'susah nak amalkan', 'produk lain'],
 };
 
 function detectAngle(text) {
