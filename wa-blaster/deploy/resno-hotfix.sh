@@ -33,7 +33,7 @@ done
 echo "== Tarik fail terkini dari GitHub (commit $SHA) =="
 for f in "${FILES[@]}"; do
   mkdir -p "$(dirname "$f")"
-  curl -sfL "$RAW/$f" -o "$f"
+  curl -sfL --retry 5 --retry-delay 2 --retry-all-errors "$RAW/$f" -o "$f"
   echo "  updated: $f"
 done
 
