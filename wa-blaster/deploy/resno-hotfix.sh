@@ -1,15 +1,17 @@
 #!/bin/bash
 # uni.haq - Resno hotfix deploy
-# Fetch fail yang berubah terus dari GitHub (commit tetap), tanpa guna git pull —
-# elak konflik sebab working tree server dah lama menyimpang dari git history.
+# Fetch fail yang berubah terus dari GitHub (satu tarball, commit tetap),
+# tanpa guna git pull — elak konflik sebab working tree server dah lama
+# menyimpang dari git history, dan elak rate-limit raw.githubusercontent.com.
 # Usage: bash resno-hotfix.sh   (run dari mana-mana, script auto cd ke /var/www/unihaq)
 
 set -e
 cd /var/www/unihaq
 
 SHA=383f8c3
-RAW="https://raw.githubusercontent.com/rvhub26/uni.haq/$SHA"
+TARBALL="https://github.com/rvhub26/uni.haq/archive/$SHA.tar.gz"
 BACKUP="/var/www/unihaq-backup-resno-$(date +%Y%m%d%H%M%S)"
+TMPDIR=$(mktemp -d)
 
 FILES=(
   "wa-blaster/backend/bot/ai-brain.js"
@@ -24,18 +26,31 @@ FILES=(
   "wa-blaster/backend/db/migrations/004_resno_pivot.sql"
 )
 
+echo "== Muat turun tarball repo (commit $SHA) =="
+curl -sfL --retry 5 --retry-delay 3 "$TARBALL" -o "$TMPDIR/repo.tar.gz"
+tar -xzf "$TMPDIR/repo.tar.gz" -C "$TMPDIR"
+EXTRACTED=$(find "$TMPDIR" -maxdepth 1 -type d -name "uni.haq-*" | head -1)
+
+if [ -z "$EXTRACTED" ]; then
+  echo "FAIL: tarball tak extract dengan betul"
+  rm -rf "$TMPDIR"
+  exit 1
+fi
+
 echo "== Backup fail sedia ada ke $BACKUP =="
 for f in "${FILES[@]}"; do
   mkdir -p "$BACKUP/$(dirname "$f")"
   [ -f "$f" ] && cp "$f" "$BACKUP/$f" || true
 done
 
-echo "== Tarik fail terkini dari GitHub (commit $SHA) =="
+echo "== Salin fail terkini dari tarball =="
 for f in "${FILES[@]}"; do
   mkdir -p "$(dirname "$f")"
-  curl -sfL --retry 5 --retry-delay 2 --retry-all-errors "$RAW/$f" -o "$f"
+  cp "$EXTRACTED/$f" "$f"
   echo "  updated: $f"
 done
+
+rm -rf "$TMPDIR"
 
 echo "== Run migration 004 sahaja (001-003 dah applied) =="
 cd wa-blaster/backend
