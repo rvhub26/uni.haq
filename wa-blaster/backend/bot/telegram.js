@@ -19,21 +19,17 @@ async function send(text, token, chatId) {
 }
 
 // Real time — bila order close
-async function notifyNewOrder(prospect, order, product, settings = null) {
+async function notifyNewOrder(prospect, order, product, settings = null, tiers = []) {
   const token  = settings?.telegram_bot_token;
   const chatId = settings?.telegram_chat_id;
 
-  const pakejLabel = {
-    '1_botol': '1 Botol',
-    '2_botol': 'Pakej 2 Botol',
-    '3_botol': 'Pakej 3 Botol',
-  };
+  const tierLabel = (tiers.find(t => t.tierKey === order?.pakej) || {}).label || order?.pakej || '-';
 
   const text = `🔔 <b>ORDER BARU MASUK!</b>
 
 👤 Nama: ${prospect.nama || '-'}
 📱 No Fon: ${prospect.phone_number}
-📦 Produk: ${product?.nama_produk || 'Resno'} — ${pakejLabel[order?.pakej] || '-'}
+📦 Produk: ${product?.nama_produk || 'Produk'} — ${tierLabel}
 💰 Total: RM${order?.total_price || '-'}
 🏦 Payment: ${order?.payment_method?.toUpperCase() || '-'}
 🏠 Alamat: ${order?.delivery_address || 'COD — tunggu details'}

@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { renderTemplate } = require('./templateRenderer');
 
 let client = null;
 
@@ -9,58 +10,27 @@ function getClient() {
   return client;
 }
 
-const SYSTEM_PROMPT = `Kau adalah Aina, seorang consultant kesihatan untuk produk supplement Resno.
+const FALLBACK_PROMPT = `Kau adalah {{persona}}, seorang consultant kesihatan untuk produk {{namaProduk}}.
+Harga: {{hargaLadder}}
+Bahasa Melayu Malaysia, mesra dan professional. Jangan dakwa penyembuhan/rawatan.
+Return HANYA JSON: {"messages": ["mesej 1"], "next_step": "string atau null", "prospect_temperature": "HOT atau WARM atau COLD", "should_close": true atau false}`;
 
-PERSONA KAU:
-- Nama: Aina
-- Mesra, empathy tinggi, professional — macam kawan yang faham
-- Kau bukan robot — kau manusia sebenar
+function buildHargaLadder(tiers) {
+  return tiers.map(t => `${t.label} RM${t.price} (${t.quantity * 30} hari)`).join(', ');
+}
 
-PRODUK:
-- Nama: Resno
-- Kategori: Sokongan kesihatan sendi & tenaga harian untuk dewasa 35+
-- Harga: RM89 (1 botol/30 hari), RM159 (pakej 2 botol/60 hari), RM219 (pakej 3 botol/90 hari)
-- Ingredients: Glucosamine Sulphate, Collagen Peptide (Type II), Ekstrak Herba Terpilih, Vitamin D3
-- Manfaat: Sokongan keselesaan pergerakan sendi, sokongan tenaga harian
-- Cara ambil: 2 kapsul sehari selepas makan, konsisten sebagai rutin harian
-- Payment: Bank transfer atau COD (ikut setting produk)
-
-RULES COMPLIANCE (PENTING — jangan langgar):
-- JANGAN sekali-kali guna perkataan: sembuh, rawat, jamin, cure, 100% berkesan, hilang terus
-- Resno BUKAN ubat — ia sokongan rutin harian, bukan rawatan atau penyembuhan penyakit
-- Kalau prospect tanya "boleh sembuhkan artritis/sakit sendi saya tak", jawab ia bukan ubat dan cadangkan rujuk doktor untuk kondisi serius
-- Jangan dakwa sijil KKM/Halal wujud melainkan disahkan dalam data produk
-
-RULES BAHASA:
-- Bahasa Melayu Malaysia, informal tapi professional
-- Guna "awak" untuk refer prospect (neutral, bukan gender-specific)
-- Satu mesej satu idea — ayat PENDEK
-- Jangan guna "-" dalam ayat
-- Emoji sparingly — max 1-2 per mesej
-- JANGAN nampak macam nak jual — nampak macam nak consult dan bantu
-
-STRATEGI CLOSING:
-1. Fear Amplification — sebelum present produk
-2. Social proof — testimoni pengguna lain
-3. Either/Or close — jangan tanya "nak beli tak?"
-4. Upsell — sebotol → pakej 2 botol → pakej 3 botol
-5. Urgency bila objection — stok terhad
-
-TUJUAN: Close sale dengan closing rate minimum 50%
-
-Return HANYA JSON, tiada text lain:
-{
-  "messages": ["mesej 1", "mesej 2"],
-  "next_step": "string atau null",
-  "prospect_temperature": "HOT atau WARM atau COLD",
-  "should_close": true atau false
-}`;
-
-async function getAIResponse(conversationHistory, prospectInfo) {
+async function getAIResponse(conversationHistory, prospectInfo, product, tiers, brainConfig) {
   const c = getClient();
   if (!c) return null;
 
   try {
+    const persona = brainConfig.persona_name;
+    const systemPrompt = renderTemplate(brainConfig.ai_system_prompt || FALLBACK_PROMPT, {
+      persona,
+      namaProduk: product.nama_produk,
+      hargaLadder: buildHargaLadder(tiers),
+    });
+
     // Format conversation history untuk Claude
     const formattedHistory = conversationHistory.map(conv => ({
       role: conv.direction === 'inbound' ? 'user' : 'assistant',
@@ -77,13 +47,13 @@ async function getAIResponse(conversationHistory, prospectInfo) {
 
 Reply terbaru prospect: "${prospectInfo.lastMessage}"
 
-Apa response Aina yang terbaik? Return JSON sahaja.`,
+Apa response ${persona} yang terbaik? Return JSON sahaja.`,
     };
 
     const response = await c.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: brainConfig.ai_model || 'claude-sonnet-4-6',
       max_tokens: 1000,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [...formattedHistory, userMessage],
     });
 

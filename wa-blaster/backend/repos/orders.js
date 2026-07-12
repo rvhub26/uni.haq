@@ -1,12 +1,10 @@
 const db = require('../db');
 
-const PAKEJ_QTY = { '1_botol': 1, '2_botol': 2, '3_botol': 3 };
-
-async function create(prospectId, deviceId, productId, pakej, totalPrice, paymentMethod) {
+async function create(prospectId, deviceId, productId, pakej, quantity, totalPrice, paymentMethod) {
   const [result] = await db.query(
     `INSERT INTO orders (prospect_id, device_id, product_id, pakej, quantity, total_price, payment_method)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [prospectId, deviceId, productId, pakej, PAKEJ_QTY[pakej] || 1, totalPrice, paymentMethod]
+    [prospectId, deviceId, productId, pakej, quantity, totalPrice, paymentMethod]
   );
   return result.insertId;
 }

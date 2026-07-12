@@ -6,6 +6,10 @@ const prospectsRepo = require('../repos/prospects');
 const conversationsRepo = require('../repos/conversations');
 const contactsRepo = require('../repos/contacts');
 const botSettingsRepo = require('../repos/botSettings');
+const anglesRepo = require('../repos/angles');
+const messageTemplatesRepo = require('../repos/messageTemplates');
+const packageTiersRepo = require('../repos/packageTiers');
+const brainConfigRepo = require('../repos/brainConfig');
 const humanizer = require('./humanizer');
 
 async function handleIncoming(userId, deviceId, message) {
@@ -35,6 +39,14 @@ async function handleIncoming(userId, deviceId, message) {
   const settings = await botSettingsRepo.ensureForDevice(deviceId);
   const aiEnabled = settings?.ai_brain_enabled === 1 && process.env.CLAUDE_API_KEY;
 
+  const [angles, templateMap, tiers, brainConfig] = await Promise.all([
+    anglesRepo.getAllForDevice(deviceId),
+    messageTemplatesRepo.getTemplateMap(deviceId),
+    packageTiersRepo.getAllForDevice(deviceId),
+    brainConfigRepo.ensureForDevice(deviceId),
+  ]);
+  const botConfig = { angles, templateMap, tiers, brainConfig };
+
   if (aiEnabled) {
     const history = await conversationsRepo.getHistory(prospect.id, 20);
     const aiResponse = await aiBrain.getAIResponse(history, {
@@ -43,7 +55,7 @@ async function handleIncoming(userId, deviceId, message) {
       tempoh_masalah: prospect.tempoh_masalah,
       status: prospect.status,
       lastMessage: text,
-    });
+    }, product, tiers, brainConfig);
 
     if (aiResponse) {
       await humanizer.sendHumanMessages(userId, deviceId, phone, aiResponse.messages, 'text', settings);
@@ -59,7 +71,7 @@ async function handleIncoming(userId, deviceId, message) {
   }
 
   // Decision tree mode
-  await processFlow(userId, deviceId, prospect, text, product, settings);
+  await processFlow(userId, deviceId, prospect, text, product, settings, botConfig);
 }
 
 module.exports = { handleIncoming };

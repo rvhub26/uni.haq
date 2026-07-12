@@ -9,6 +9,9 @@ const { getMetaDeviceStatus } = require('./meta-api');
 const { enqueueBlast, enqueueRotationBlast, processQueue } = require('./queue');
 const prospectsRepo = require('./repos/prospects');
 const botSettingsRepo = require('./repos/botSettings');
+const productsRepo = require('./repos/products');
+const messageTemplatesRepo = require('./repos/messageTemplates');
+const brainConfigRepo = require('./repos/brainConfig');
 const botMessages = require('./bot/messages');
 const botHumanizer = require('./bot/humanizer');
 const botTelegram = require('./bot/telegram');
@@ -179,13 +182,27 @@ function startClosingBotCronJobs() {
     }
   });
 
+  // Config bot (angles/templates/tiers dashboard-configured) hanya perlu templateMap +
+  // brainConfig + product untuk follow-up copy — dimuatkan sekali per device per tick.
+  async function loadFollowUpVars(deviceId) {
+    const [product, templateMap, brainConfig] = await Promise.all([
+      productsRepo.getByDeviceId(deviceId),
+      messageTemplatesRepo.getTemplateMap(deviceId),
+      brainConfigRepo.ensureForDevice(deviceId),
+    ]);
+    const vars = { persona: brainConfig.persona_name, namaProduk: product?.nama_produk };
+    return { templateMap, vars };
+  }
+
   // Follow up 1 jam — check setiap 15 minit
   cron.schedule('*/15 * * * *', async () => {
     for (const device of await botDevices()) {
       try {
         const prospects = await prospectsRepo.getForFollowUp(device.id, 1, 'follow_up_1h');
+        if (!prospects.length) continue;
+        const { templateMap, vars } = await loadFollowUpVars(device.id);
         for (const p of prospects) {
-          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.followUp1h());
+          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.getShared(templateMap, 'followUp1h', vars));
           await prospectsRepo.markFollowUpSent(device.id, p.phone_number, 'follow_up_1h');
         }
       } catch (e) {
@@ -199,8 +216,10 @@ function startClosingBotCronJobs() {
     for (const device of await botDevices()) {
       try {
         const prospects = await prospectsRepo.getForFollowUp(device.id, 24, 'follow_up_24h');
+        if (!prospects.length) continue;
+        const { templateMap, vars } = await loadFollowUpVars(device.id);
         for (const p of prospects) {
-          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.followUp24h());
+          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.getShared(templateMap, 'followUp24h', vars));
           await prospectsRepo.markFollowUpSent(device.id, p.phone_number, 'follow_up_24h');
         }
       } catch (e) {
@@ -214,8 +233,10 @@ function startClosingBotCronJobs() {
     for (const device of await botDevices()) {
       try {
         const prospects = await prospectsRepo.getForFollowUp(device.id, 72, 'follow_up_72h');
+        if (!prospects.length) continue;
+        const { templateMap, vars } = await loadFollowUpVars(device.id);
         for (const p of prospects) {
-          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.followUp72h());
+          await botHumanizer.sendHumanMessages(device.user_id, device.id, p.phone_number, botMessages.getShared(templateMap, 'followUp72h', vars));
           await prospectsRepo.markFollowUpSent(device.id, p.phone_number, 'follow_up_72h');
           await prospectsRepo.updateStatus(device.id, p.phone_number, 'cold');
         }

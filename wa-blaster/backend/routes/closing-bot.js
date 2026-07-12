@@ -4,6 +4,21 @@ const productsRepo = require('../repos/products');
 const botSettingsRepo = require('../repos/botSettings');
 const prospectsRepo = require('../repos/prospects');
 const conversationsRepo = require('../repos/conversations');
+const anglesRepo = require('../repos/angles');
+const messageTemplatesRepo = require('../repos/messageTemplates');
+const packageTiersRepo = require('../repos/packageTiers');
+const brainConfigRepo = require('../repos/brainConfig');
+
+const SHARED_TEMPLATE_KEYS = [
+  'detectAngleFallback', 'introSolution', 'uspResno', 'kajianSaintifik', 'socialProof', 'closing',
+  'upsell', 'askPaymentMethod', 'paymentDetailsTransfer', 'paymentDetailsCOD', 'afterOrder',
+  'objectionMahal', 'objectionFikir', 'objectionFikirUrgency', 'coldPancing_1', 'coldPancing_2',
+  'followUp1h', 'followUp24h', 'followUp72h',
+];
+const PER_ANGLE_TEMPLATE_KEYS = [
+  'greeting', 'factFinding', 'korekMasalah', 'fearAmplification', 'tanyaIkhtiar',
+  'responseIkhtiarLain', 'introSolutionResponse',
+];
 
 async function requireOwnedDevice(req, res, next) {
   const device = await devicesRepo.getById(req.params.deviceId);
@@ -34,6 +49,11 @@ function toSettingsApi(s) {
     botSleepStart: s.bot_sleep_start, botSleepEnd: s.bot_sleep_end,
     adSpendToday: s.ad_spend_today,
   };
+}
+
+function toBrainConfigApi(b) {
+  if (!b) return null;
+  return { personaName: b.persona_name, aiSystemPrompt: b.ai_system_prompt, aiModel: b.ai_model };
 }
 
 function toProspectApi(p) {
@@ -92,6 +112,93 @@ router.put('/:deviceId/settings', requireOwnedDevice, async (req, res) => {
 
   const settings = await botSettingsRepo.update(req.params.deviceId, fields);
   res.json(toSettingsApi(settings));
+});
+
+// GET /api/closing-bot/:deviceId/angles
+router.get('/:deviceId/angles', requireOwnedDevice, async (req, res) => {
+  res.json(await anglesRepo.getAllForDevice(req.params.deviceId));
+});
+
+// PUT /api/closing-bot/:deviceId/angles — list-replace-on-save
+router.put('/:deviceId/angles', requireOwnedDevice, async (req, res) => {
+  const angles = Array.isArray(req.body.angles) ? req.body.angles : [];
+  for (const a of angles) {
+    if (!a.angleKey?.trim() || !a.label?.trim()) {
+      return res.status(400).json({ error: 'Setiap angle perlukan angleKey dan label' });
+    }
+  }
+  res.json(await anglesRepo.replaceAllForDevice(req.params.deviceId, angles));
+});
+
+// GET /api/closing-bot/:deviceId/templates
+router.get('/:deviceId/templates', requireOwnedDevice, async (req, res) => {
+  const map = await messageTemplatesRepo.getTemplateMap(req.params.deviceId);
+  res.json({ shared: map._shared || {}, ...Object.fromEntries(Object.entries(map).filter(([k]) => k !== '_shared')) });
+});
+
+// PUT /api/closing-bot/:deviceId/templates — list-replace-on-save, validates required keys present
+router.put('/:deviceId/templates', requireOwnedDevice, async (req, res) => {
+  const angles = await anglesRepo.getAllForDevice(req.params.deviceId);
+  const body = req.body || {};
+  const missing = [];
+
+  for (const key of SHARED_TEMPLATE_KEYS) {
+    if (!body.shared?.[key]?.length) missing.push(`shared.${key}`);
+  }
+  for (const angle of angles) {
+    for (const key of PER_ANGLE_TEMPLATE_KEYS) {
+      if (!body[angle.angleKey]?.[key]?.length) missing.push(`${angle.angleKey}.${key}`);
+    }
+  }
+  if (missing.length) {
+    return res.status(400).json({ error: 'Skrip mesej tidak lengkap', missing });
+  }
+
+  const templates = [];
+  for (const key of SHARED_TEMPLATE_KEYS) {
+    templates.push({ angleKey: '_shared', templateKey: key, bubbles: body.shared[key] });
+  }
+  for (const angle of angles) {
+    for (const key of PER_ANGLE_TEMPLATE_KEYS) {
+      templates.push({ angleKey: angle.angleKey, templateKey: key, bubbles: body[angle.angleKey][key] });
+    }
+  }
+
+  const map = await messageTemplatesRepo.replaceAllForDevice(req.params.deviceId, templates);
+  res.json({ shared: map._shared || {}, ...Object.fromEntries(Object.entries(map).filter(([k]) => k !== '_shared')) });
+});
+
+// GET /api/closing-bot/:deviceId/package-tiers
+router.get('/:deviceId/package-tiers', requireOwnedDevice, async (req, res) => {
+  res.json(await packageTiersRepo.getAllForDevice(req.params.deviceId));
+});
+
+// PUT /api/closing-bot/:deviceId/package-tiers — list-replace-on-save
+router.put('/:deviceId/package-tiers', requireOwnedDevice, async (req, res) => {
+  const tiers = Array.isArray(req.body.tiers) ? req.body.tiers : [];
+  for (const t of tiers) {
+    if (!t.tierKey?.trim() || !t.label?.trim()) {
+      return res.status(400).json({ error: 'Setiap pakej perlukan tierKey dan label' });
+    }
+  }
+  res.json(await packageTiersRepo.replaceAllForDevice(req.params.deviceId, tiers));
+});
+
+// GET /api/closing-bot/:deviceId/brain-config
+router.get('/:deviceId/brain-config', requireOwnedDevice, async (req, res) => {
+  res.json(toBrainConfigApi(await brainConfigRepo.ensureForDevice(req.params.deviceId)));
+});
+
+// PUT /api/closing-bot/:deviceId/brain-config — partial update
+router.put('/:deviceId/brain-config', requireOwnedDevice, async (req, res) => {
+  const body = req.body;
+  const fields = {};
+  if (body.personaName !== undefined) fields.persona_name = body.personaName;
+  if (body.aiSystemPrompt !== undefined) fields.ai_system_prompt = body.aiSystemPrompt;
+  if (body.aiModel !== undefined) fields.ai_model = body.aiModel;
+
+  const config = await brainConfigRepo.update(req.params.deviceId, fields);
+  res.json(toBrainConfigApi(config));
 });
 
 // GET /api/closing-bot/:deviceId/prospects

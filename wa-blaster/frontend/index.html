@@ -64,10 +64,6 @@
           <span class="nav-icon">📊</span>
           <span>Laporan</span>
         </a>
-        <a class="nav-item" data-tab="peranti">
-          <span class="nav-icon">📱</span>
-          <span>Peranti</span>
-        </a>
       </div>
     </div>
 
@@ -80,6 +76,10 @@
         <a class="nav-item" data-tab="bot-closing">
           <span class="nav-icon">🤖</span>
           <span>Setup & Prospek</span>
+        </a>
+        <a class="nav-item" data-tab="peranti">
+          <span class="nav-icon">📱</span>
+          <span>Peranti</span>
         </a>
       </div>
     </div>
@@ -1126,20 +1126,7 @@
                 <label class="field-label">Nama Produk</label>
                 <input type="text" id="bc-p-nama" class="input-field" placeholder="Cth: Resno" />
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-                <div class="field-group">
-                  <label class="field-label">Harga 1 Botol</label>
-                  <input type="number" id="bc-p-harga1" class="input-field" step="0.01" min="0" />
-                </div>
-                <div class="field-group">
-                  <label class="field-label">Pakej 2 Botol</label>
-                  <input type="number" id="bc-p-harga3" class="input-field" step="0.01" min="0" />
-                </div>
-                <div class="field-group">
-                  <label class="field-label">Pakej 3 Botol</label>
-                  <input type="number" id="bc-p-harga6" class="input-field" step="0.01" min="0" />
-                </div>
-              </div>
+              <div class="page-header-sub" style="margin:-4px 0 2px;">Harga & pakej diset di kad "Pakej &amp; Harga" di bawah.</div>
               <div class="field-group">
                 <label class="field-label">Nama Akaun Bank</label>
                 <input type="text" id="bc-p-namaakaun" class="input-field" placeholder="Cth: ROLE VISION SDN BHD" />
@@ -1199,6 +1186,62 @@
           <div id="bc-img-slots" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"></div>
         </div>
 
+        <!-- Pakej & Harga -->
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-header" style="margin-bottom:14px;">
+            <h2>💰 Pakej &amp; Harga</h2>
+          </div>
+          <div class="page-header-sub" style="margin-bottom:12px;">Susunan pakej ikut turutan di bawah — pakej pertama jadi pakej asas (entry). Kata kunci = perkataan yang bot cari dalam reply prospect untuk kenal pasti pakej mana yang dipilih.</div>
+          <div id="bc-tiers-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn-secondary" id="bc-btn-add-tier">+ Tambah Pakej</button>
+            <button class="btn-primary" id="bc-btn-save-tiers">💾 Simpan Pakej</button>
+          </div>
+        </div>
+
+        <!-- Angle & Kata Kunci -->
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-header" style="margin-bottom:14px;">
+            <h2>🎯 Angle &amp; Kata Kunci</h2>
+          </div>
+          <div class="page-header-sub" style="margin-bottom:12px;">Angle = masalah/pain-point utama prospek. Bot detect angle dari kata kunci dalam mesej pertama — angle pertama yang match akan dipilih.</div>
+          <div id="bc-angles-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn-secondary" id="bc-btn-add-angle">+ Tambah Angle</button>
+            <button class="btn-primary" id="bc-btn-save-angles">💾 Simpan Angle</button>
+          </div>
+        </div>
+
+        <!-- AI Brain -->
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-header" style="margin-bottom:14px;">
+            <h2>🧠 AI Brain — Pengetahuan Produk</h2>
+          </div>
+          <div class="page-header-sub" style="margin-bottom:12px;">Hanya dipakai kalau "AI Brain (Claude)" ON di Settings Bot. Guna {{persona}}, {{namaProduk}}, {{hargaLadder}} untuk placeholder — automatik diganti bila bot reply.</div>
+          <div class="form-stack">
+            <div class="field-group">
+              <label class="field-label">Nama Persona Bot</label>
+              <input type="text" id="bc-brain-persona" class="input-field" placeholder="Cth: Zia" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">System Prompt (pengetahuan produk, gaya bahasa, rules)</label>
+              <textarea id="bc-brain-prompt" class="input-field" rows="14" style="font-family:monospace;font-size:0.8rem;"></textarea>
+            </div>
+            <button class="btn-primary" id="bc-btn-save-brain">💾 Simpan AI Brain</button>
+          </div>
+        </div>
+
+        <!-- Skrip Mesej -->
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-header" style="margin-bottom:14px;">
+            <h2>💬 Skrip Mesej</h2>
+          </div>
+          <div class="page-header-sub" style="margin-bottom:12px;">Guna {{persona}}, {{namaProduk}}, {{tempoh}} untuk placeholder. Untuk skrip "upsell"/"objectionMahal" ada placeholder khas ({{tierOptions}}, {{maxSavings}}, dll) — jangan buang, ia auto-kira ikut Pakej &amp; Harga di atas.</div>
+          <div id="bc-templates-shared"></div>
+          <div id="bc-templates-angles"></div>
+          <button class="btn-primary" id="bc-btn-save-templates" style="margin-top:10px;">💾 Simpan Skrip Mesej</button>
+        </div>
+
         <!-- Prospects -->
         <div class="card">
           <div class="card-header" style="margin-bottom:12px;">
@@ -1228,6 +1271,25 @@
     var bcDeviceId = null;
     var bcDevices = [];
     var bcImages = {};
+    var bcAngles = [];
+    var bcTiers = [];
+    var bcTemplates = { shared: {} };
+
+    var SHARED_TEMPLATE_LABELS = {
+      detectAngleFallback: 'Tak Detect Angle (fallback)', introSolution: 'Intro Solution',
+      uspResno: 'USP Produk', kajianSaintifik: 'Kajian Saintifik', socialProof: 'Social Proof',
+      closing: 'Closing', upsell: 'Upsell', askPaymentMethod: 'Tanya Kaedah Bayaran',
+      paymentDetailsTransfer: 'Details Bayaran (Transfer)', paymentDetailsCOD: 'Details Bayaran (COD)',
+      afterOrder: 'Selepas Order', objectionMahal: 'Objection: Mahal', objectionFikir: 'Objection: Fikir Dulu',
+      objectionFikirUrgency: 'Objection: Fikir Dulu (Urgency)', coldPancing_1: 'Cold Pancing #1',
+      coldPancing_2: 'Cold Pancing #2', followUp1h: 'Follow Up 1 Jam', followUp24h: 'Follow Up 24 Jam',
+      followUp72h: 'Follow Up 72 Jam',
+    };
+    var PER_ANGLE_TEMPLATE_LABELS = {
+      greeting: 'Greeting', factFinding: 'Fakta/Details Awal', korekMasalah: 'Korek Masalah',
+      fearAmplification: 'Fear Amplification', tanyaIkhtiar: 'Tanya Ikhtiar Lain',
+      responseIkhtiarLain: 'Response bila ada Ikhtiar Lain', introSolutionResponse: 'Response Intro Solution',
+    };
 
     var IMAGE_SLOTS = [
       { key: 'gambarProduk', label: 'Gambar Produk' },
@@ -1237,6 +1299,7 @@
       { key: 'gambarIngredient', label: 'Gambar Bahan/Ingredient' },
       { key: 'gambarKkm', label: 'Sijil KKM/Halal' },
       { key: 'gambarKajian', label: 'Gambar Kajian Saintifik' },
+      { key: 'gambarPakej', label: 'Gambar Pakej (untuk upsell)' },
     ];
 
     function renderImageSlots() {
@@ -1312,15 +1375,14 @@
 
     async function bcLoadAll() {
       if (!bcDeviceId) return;
-      await Promise.all([bcLoadProduct(), bcLoadSettings(), bcLoadProspects()]);
+      await Promise.all([bcLoadProduct(), bcLoadSettings(), bcLoadProspects(), bcLoadTiers(), bcLoadBrainConfig()]);
+      await bcLoadAngles();
+      await bcLoadTemplates();
     }
 
     async function bcLoadProduct() {
       var p = await fetch('/api/closing-bot/'+bcDeviceId+'/product').then(function(r){ return r.json(); }).catch(function(){ return null; });
       document.getElementById('bc-p-nama').value = p ? p.namaProduk || '' : '';
-      document.getElementById('bc-p-harga1').value = p ? p.harga1 || '' : '';
-      document.getElementById('bc-p-harga3').value = p ? p.hargaPakej2 || '' : '';
-      document.getElementById('bc-p-harga6').value = p ? p.hargaPakej3 || '' : '';
       document.getElementById('bc-p-namaakaun').value = p ? p.namaAkaun || '' : '';
       document.getElementById('bc-p-bank1nama').value = p ? p.bank1Nama || '' : '';
       document.getElementById('bc-p-bank1no').value = p ? p.bank1No || '' : '';
@@ -1342,6 +1404,195 @@
       document.getElementById('bc-s-sleepend').value = s && s.botSleepEnd ? s.botSleepEnd.slice(0,5) : '07:00';
       document.getElementById('bc-s-tgtoken').value = s ? s.telegramBotToken || '' : '';
       document.getElementById('bc-s-tgchatid').value = s ? s.telegramChatId || '' : '';
+    }
+
+    // ---- Angle & Kata Kunci ----
+
+    function syncAnglesFromDom() {
+      document.querySelectorAll('#bc-angles-list .bc-row').forEach(function(row, i) {
+        bcAngles[i] = {
+          angleKey: row.querySelector('.bc-angle-key').value.trim(),
+          label: row.querySelector('.bc-angle-label').value.trim(),
+          keywords: row.querySelector('.bc-angle-keywords').value.split(',').map(function(s){ return s.trim(); }).filter(Boolean),
+        };
+      });
+    }
+
+    function renderAngles() {
+      var el = document.getElementById('bc-angles-list');
+      if (!bcAngles.length) { el.innerHTML = '<p class="empty-pick">Tiada angle lagi</p>'; return; }
+      el.innerHTML = bcAngles.map(function(a) {
+        return '<div class="bc-row" style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;">'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px;">'
+          + '<input type="text" class="input-field bc-angle-key" placeholder="angle key (cth: kaku)" value="'+escHtml(a.angleKey)+'" />'
+          + '<input type="text" class="input-field bc-angle-label" placeholder="Label (cth: Sendi Kaku)" value="'+escHtml(a.label)+'" />'
+          + '<button type="button" class="bc-angle-remove" style="background:none;border:none;color:#ef4444;cursor:pointer;">✕</button>'
+          + '</div>'
+          + '<textarea class="input-field bc-angle-keywords" rows="2" placeholder="kata kunci, pisah dengan koma">'+escHtml((a.keywords||[]).join(', '))+'</textarea>'
+          + '</div>';
+      }).join('');
+
+      el.querySelectorAll('.bc-angle-remove').forEach(function(btn, i) {
+        btn.addEventListener('click', function() {
+          syncAnglesFromDom();
+          bcAngles.splice(i, 1);
+          renderAngles();
+        });
+      });
+    }
+
+    async function bcLoadAngles() {
+      bcAngles = await fetch('/api/closing-bot/'+bcDeviceId+'/angles').then(function(r){ return r.json(); }).catch(function(){ return []; });
+      renderAngles();
+    }
+
+    // ---- Pakej & Harga ----
+
+    function syncTiersFromDom() {
+      document.querySelectorAll('#bc-tiers-list .bc-row').forEach(function(row, i) {
+        bcTiers[i] = {
+          tierKey: row.querySelector('.bc-tier-key').value.trim(),
+          label: row.querySelector('.bc-tier-label').value.trim(),
+          quantity: parseInt(row.querySelector('.bc-tier-qty').value) || 1,
+          price: parseFloat(row.querySelector('.bc-tier-price').value) || 0,
+          keywords: row.querySelector('.bc-tier-keywords').value.split(',').map(function(s){ return s.trim(); }).filter(Boolean),
+          upsellPhrase: row.querySelector('.bc-tier-phrase').value.trim() || null,
+        };
+      });
+    }
+
+    function renderTiers() {
+      var el = document.getElementById('bc-tiers-list');
+      if (!bcTiers.length) { el.innerHTML = '<p class="empty-pick">Tiada pakej lagi</p>'; return; }
+      el.innerHTML = bcTiers.map(function(t) {
+        return '<div class="bc-row" style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;">'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr 80px 100px auto;gap:8px;margin-bottom:8px;">'
+          + '<input type="text" class="input-field bc-tier-key" placeholder="tier key (cth: 1_botol)" value="'+escHtml(t.tierKey)+'" />'
+          + '<input type="text" class="input-field bc-tier-label" placeholder="Label (cth: 1 Botol)" value="'+escHtml(t.label)+'" />'
+          + '<input type="number" class="input-field bc-tier-qty" placeholder="Kuantiti" value="'+(t.quantity||1)+'" />'
+          + '<input type="number" class="input-field bc-tier-price" step="0.01" placeholder="Harga RM" value="'+(t.price||0)+'" />'
+          + '<button type="button" class="bc-tier-remove" style="background:none;border:none;color:#ef4444;cursor:pointer;">✕</button>'
+          + '</div>'
+          + '<input type="text" class="input-field bc-tier-keywords" style="margin-bottom:8px;" placeholder="kata kunci deteksi, pisah dengan koma (cth: 2, dua)" value="'+escHtml((t.keywords||[]).join(', '))+'" />'
+          + '<input type="text" class="input-field bc-tier-phrase" placeholder="Ayat upsell custom (pilihan — default: pakej {kuantiti} botol RM{harga})" value="'+escHtml(t.upsellPhrase||'')+'" />'
+          + '</div>';
+      }).join('');
+
+      el.querySelectorAll('.bc-tier-remove').forEach(function(btn, i) {
+        btn.addEventListener('click', function() {
+          syncTiersFromDom();
+          bcTiers.splice(i, 1);
+          renderTiers();
+        });
+      });
+    }
+
+    async function bcLoadTiers() {
+      bcTiers = await fetch('/api/closing-bot/'+bcDeviceId+'/package-tiers').then(function(r){ return r.json(); }).catch(function(){ return []; });
+      renderTiers();
+    }
+
+    // ---- AI Brain ----
+
+    async function bcLoadBrainConfig() {
+      var b = await fetch('/api/closing-bot/'+bcDeviceId+'/brain-config').then(function(r){ return r.json(); }).catch(function(){ return null; });
+      document.getElementById('bc-brain-persona').value = b ? b.personaName || '' : '';
+      document.getElementById('bc-brain-prompt').value = b ? b.aiSystemPrompt || '' : '';
+    }
+
+    // ---- Skrip Mesej ----
+
+    function templateBubblesHtml(prefix, key, label, bubbles) {
+      bubbles = (bubbles && bubbles.length) ? bubbles : [''];
+      var rows = bubbles.map(function(b) {
+        return '<div style="display:flex;gap:6px;margin-bottom:6px;">'
+          + '<textarea class="input-field bc-tpl-bubble" rows="2" style="flex:1;">'+escHtml(b)+'</textarea>'
+          + '<button type="button" class="bc-tpl-bubble-remove" style="background:none;border:none;color:#ef4444;cursor:pointer;">✕</button>'
+          + '</div>';
+      }).join('');
+      return '<div class="bc-tpl-group" data-prefix="'+prefix+'" data-key="'+key+'" style="margin-bottom:14px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+        + '<label class="field-label" style="margin:0;">'+escHtml(label)+'</label>'
+        + '<button type="button" class="bc-tpl-bubble-add" style="background:none;border:1px solid #334155;color:#94a3b8;border-radius:6px;font-size:0.72rem;padding:2px 8px;cursor:pointer;">+ mesej</button>'
+        + '</div>'
+        + '<div class="bc-tpl-bubbles">' + rows + '</div>'
+        + '</div>';
+    }
+
+    function bcTplGroupBubbles(groupEl) {
+      return Array.from(groupEl.querySelectorAll('.bc-tpl-bubble')).map(function(t){ return t.value; });
+    }
+
+    // Delegated click handler — attached once per stable container below, so it
+    // still works for bubble rows added later via "+ mesej" (fixes the "+ mesej"
+    // row having no working delete button).
+    function handleTemplateBubbleClick(e) {
+      var addBtn = e.target.closest('.bc-tpl-bubble-add');
+      if (addBtn) {
+        var group = addBtn.closest('.bc-tpl-group');
+        var bubbles = group.querySelector('.bc-tpl-bubbles');
+        var div = document.createElement('div');
+        div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;';
+        div.innerHTML = '<textarea class="input-field bc-tpl-bubble" rows="2" style="flex:1;"></textarea>'
+          + '<button type="button" class="bc-tpl-bubble-remove" style="background:none;border:none;color:#ef4444;cursor:pointer;">✕</button>';
+        bubbles.appendChild(div);
+        return;
+      }
+      var removeBtn = e.target.closest('.bc-tpl-bubble-remove');
+      if (removeBtn) {
+        var bubblesEl = removeBtn.closest('.bc-tpl-bubbles');
+        if (bubblesEl.children.length > 1) {
+          removeBtn.closest('div').remove();
+        } else {
+          // Sekurang-kurangnya satu mesej diperlukan — kosongkan je instead of buang
+          bubblesEl.querySelector('.bc-tpl-bubble').value = '';
+        }
+      }
+    }
+
+    function renderTemplates() {
+      var sharedEl = document.getElementById('bc-templates-shared');
+      sharedEl.innerHTML = '<h3 style="color:#f1f5f9;font-size:0.9rem;margin-bottom:10px;">Skrip Umum</h3>'
+        + Object.keys(SHARED_TEMPLATE_LABELS).map(function(key) {
+          return templateBubblesHtml('shared', key, SHARED_TEMPLATE_LABELS[key], (bcTemplates.shared || {})[key]);
+        }).join('');
+
+      var anglesEl = document.getElementById('bc-templates-angles');
+      anglesEl.innerHTML = bcAngles.map(function(a) {
+        var id = 'bc-tpl-angle-' + a.angleKey;
+        return '<details style="margin-top:16px;">'
+          + '<summary style="color:#f1f5f9;font-size:0.9rem;cursor:pointer;margin-bottom:10px;">Skrip Angle: '+escHtml(a.label || a.angleKey)+'</summary>'
+          + '<div id="'+id+'"></div>'
+          + '</details>';
+      }).join('');
+      bcAngles.forEach(function(a) {
+        var groupEl = document.getElementById('bc-tpl-angle-' + a.angleKey);
+        if (!groupEl) return;
+        groupEl.innerHTML = Object.keys(PER_ANGLE_TEMPLATE_LABELS).map(function(key) {
+          return templateBubblesHtml(a.angleKey, key, PER_ANGLE_TEMPLATE_LABELS[key], (bcTemplates[a.angleKey] || {})[key]);
+        }).join('');
+      });
+    }
+
+    async function bcLoadTemplates() {
+      bcTemplates = await fetch('/api/closing-bot/'+bcDeviceId+'/templates').then(function(r){ return r.json(); }).catch(function(){ return { shared: {} }; });
+      renderTemplates();
+    }
+
+    function collectTemplatesFromDom() {
+      var body = { shared: {} };
+      document.querySelectorAll('#bc-templates-shared .bc-tpl-group').forEach(function(group) {
+        body.shared[group.getAttribute('data-key')] = bcTplGroupBubbles(group);
+      });
+      bcAngles.forEach(function(a) {
+        var groupEl = document.getElementById('bc-tpl-angle-' + a.angleKey);
+        if (!groupEl) return;
+        body[a.angleKey] = {};
+        groupEl.querySelectorAll('.bc-tpl-group').forEach(function(group) {
+          body[a.angleKey][group.getAttribute('data-key')] = bcTplGroupBubbles(group);
+        });
+      });
+      return body;
     }
 
     var TEMP_COLOR = { HOT: '#ef4444', WARM: '#f59e0b', COLD: '#3b82f6' };
@@ -1405,9 +1656,6 @@
         method: 'PUT', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
           namaProduk: nama,
-          harga1: parseFloat(document.getElementById('bc-p-harga1').value) || 0,
-          hargaPakej2: parseFloat(document.getElementById('bc-p-harga3').value) || 0,
-          hargaPakej3: parseFloat(document.getElementById('bc-p-harga6').value) || 0,
           namaAkaun: document.getElementById('bc-p-namaakaun').value.trim(),
           bank1Nama: document.getElementById('bc-p-bank1nama').value.trim(),
           bank1No: document.getElementById('bc-p-bank1no').value.trim(),
@@ -1421,6 +1669,7 @@
           gambarIngredient: bcImages.gambarIngredient || null,
           gambarKkm: bcImages.gambarKkm || null,
           gambarKajian: bcImages.gambarKajian || null,
+          gambarPakej: bcImages.gambarPakej || null,
         })
       }).then(function(r){ return r.json(); }).then(function(data) {
         if (data.error) { alert(data.error); return; }
@@ -1441,6 +1690,76 @@
       }).then(function(r){ return r.json(); }).then(function(data) {
         if (data.error) { alert(data.error); return; }
         if (typeof showToast === 'function') showToast('Settings disimpan');
+      });
+    });
+
+    document.getElementById('bc-btn-add-angle').addEventListener('click', function() {
+      syncAnglesFromDom();
+      bcAngles.push({ angleKey: '', label: '', keywords: [] });
+      renderAngles();
+    });
+
+    document.getElementById('bc-btn-save-angles').addEventListener('click', function() {
+      syncAnglesFromDom();
+      if (bcAngles.some(function(a){ return !a.angleKey || !a.label; })) { alert('Setiap angle perlukan angle key dan label'); return; }
+      fetch('/api/closing-bot/'+bcDeviceId+'/angles', {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ angles: bcAngles }),
+      }).then(function(r){ return r.json(); }).then(async function(data) {
+        if (data.error) { alert(data.error); return; }
+        bcAngles = data;
+        renderAngles();
+        await bcLoadTemplates();
+        if (typeof showToast === 'function') showToast('Angle disimpan');
+      });
+    });
+
+    document.getElementById('bc-btn-add-tier').addEventListener('click', function() {
+      syncTiersFromDom();
+      bcTiers.push({ tierKey: '', label: '', quantity: 1, price: 0, keywords: [], upsellPhrase: null });
+      renderTiers();
+    });
+
+    document.getElementById('bc-btn-save-tiers').addEventListener('click', function() {
+      syncTiersFromDom();
+      if (bcTiers.some(function(t){ return !t.tierKey || !t.label; })) { alert('Setiap pakej perlukan tier key dan label'); return; }
+      fetch('/api/closing-bot/'+bcDeviceId+'/package-tiers', {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ tiers: bcTiers }),
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        bcTiers = data;
+        renderTiers();
+        if (typeof showToast === 'function') showToast('Pakej disimpan');
+      });
+    });
+
+    document.getElementById('bc-btn-save-brain').addEventListener('click', function() {
+      fetch('/api/closing-bot/'+bcDeviceId+'/brain-config', {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          personaName: document.getElementById('bc-brain-persona').value.trim(),
+          aiSystemPrompt: document.getElementById('bc-brain-prompt').value,
+        }),
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.error) { alert(data.error); return; }
+        if (typeof showToast === 'function') showToast('AI Brain disimpan');
+      });
+    });
+
+    document.getElementById('bc-templates-shared').addEventListener('click', handleTemplateBubbleClick);
+    document.getElementById('bc-templates-angles').addEventListener('click', handleTemplateBubbleClick);
+
+    document.getElementById('bc-btn-save-templates').addEventListener('click', function() {
+      var body = collectTemplatesFromDom();
+      fetch('/api/closing-bot/'+bcDeviceId+'/templates', {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.error) { alert(data.error + (data.missing ? ':\n' + data.missing.join('\n') : '')); return; }
+        bcTemplates = data;
+        renderTemplates();
+        if (typeof showToast === 'function') showToast('Skrip mesej disimpan');
       });
     });
 

@@ -120,8 +120,8 @@ async function deleteUser(id, username) {
 // ── Tab navigation ────────────────────────────────────
 const TAB_GROUP = {
   dashboard: 'uniblast', contacts: 'uniblast', templates: 'uniblast', jadual: 'uniblast',
-  queue: 'uniblast', laporan: 'uniblast', peranti: 'uniblast',
-  'bot-closing': 'unibot',
+  queue: 'uniblast', laporan: 'uniblast',
+  'bot-closing': 'unibot', peranti: 'unibot',
 };
 
 function toggleNavGroup(name) {

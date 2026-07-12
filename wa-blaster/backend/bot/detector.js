@@ -1,18 +1,13 @@
 // ============================================================
 // ANGLE DETECTION — dari keyword mesej pertama prospect
+// `angles` = [{angleKey, keywords}] dari dashboard (bot_angles), ordered by sort_order
 // ============================================================
 
-const ANGLE_KEYWORDS = {
-  kaku:   ['kaku', 'sendi', 'lutut', 'sakit sendi', 'sengal', 'bengkak', 'sukar bergerak', 'tulang', 'stiff'],
-  tenaga: ['tenaga', 'penat', 'letih', 'lesu', 'stamina', 'tak larat', 'cepat penat', 'tak bertenaga', 'mengantuk sepanjang hari'],
-  rutin:  ['dah cuba', 'banyak produk', 'tak konsisten', 'x konsisten', 'lupa nak makan', 'rumit', 'susah nak amalkan', 'produk lain'],
-};
-
-function detectAngle(text) {
+function detectAngle(text, angles) {
   const lower = text.toLowerCase();
-  for (const [angle, keywords] of Object.entries(ANGLE_KEYWORDS)) {
-    if (keywords.some(kw => lower.includes(kw))) {
-      return angle;
+  for (const angle of angles) {
+    if (angle.keywords.some(kw => lower.includes(kw))) {
+      return angle.angleKey;
     }
   }
   return null;
